@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${DB_NAME:-koin_db}"
+      POSTGRES_USER: "${DB_USER:-koin_user}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-koin_password}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - "${BACKUP_BASE_PATH:-./db_backups}:/backups"
+    networks:
+      - postgres_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION}
+    image: koin:latest
+    container_name: koin
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgres://${DB_USER:-koin_user}:${DB_PASSWORD:-koin_password}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-koin_db}?sslmode=disable
+      - API_TOKEN=${API_TOKEN:-dev-token}
+      - BACKUP_BASE_PATH=${BACKUP_BASE_PATH:-./db_backups}
+    ports:
+      - "8080:8080"
+    volumes:
+      - "${BACKUP_BASE_PATH:-./db_backups}:/backups"
+    networks:
+      - postgres_network
+
+volumes:
+  postgres_data:
+
+networks:
+  postgres_network:
+    name: postgres_network
+    driver: bridge

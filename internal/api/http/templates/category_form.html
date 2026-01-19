@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crea Categoria</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        /* Stili aggiuntivi specifici del form categoria */
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">
+                💰 Koin
+            </a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/transactions">Transazioni</a></li>
+                <li><a href="/forms/accounts">Account</a></li>
+                <li><a href="/forms/categories" class="active">Categorie</a></li>
+                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <div class="container-wrapper">
+            <div class="container">
+            <h1>Crea Categoria</h1>
+            <p class="subtitle">Aggiungi una nuova categoria di spesa/entrata</p>
+
+            <div class="info-box">
+                💡 Le categorie permettono di organizzare e classificare le tue transazioni.
+            </div>
+
+            <div class="success-message" id="successMessage"></div>
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="categoryForm" method="POST" action="/api/v1/categories">
+            <div class="form-group">
+                <label for="name">Nome Categoria *</label>
+                <input 
+                    type="text" 
+                    id="name" 
+                    name="name" 
+                    placeholder="es. Cibo, Trasporti, Intrattenimento" 
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="categoryType">Tipo *</label>
+                <select id="categoryType" name="categoryType" required>
+                    <option value="">-- Seleziona --</option>
+                    <option value="INCOME">Entrata</option>
+                    <option value="EXPENSE">Spesa</option>
+                    <!-- <option value="TRANSFER">Trasferimento</option> -->
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Descrizione</label>
+                <textarea 
+                    id="description" 
+                    name="description" 
+                    placeholder="es. Spese alimentari e ristoranti"
+                ></textarea>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-submit">
+                    Crea Categoria
+                </button>
+                <button type="reset" class="btn-reset">
+                    Azzera
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <span class="spinner"></span>
+                Invio in corso...
+            </div>
+        </form>
+    </div>
+
+    <div class="card-list">
+        <h2>Le Tue Categorie</h2>
+        <ul class="item-list" id="categoriesList">
+            <li class="item-list-empty">Caricamento...</li>
+        </ul>
+    </div>
+        </div>
+    </div>
+
+    <script>
+        // Recupera l'userID dal contesto (passato dal template backend)
+        const userID = {{ .userID }} || 0;
+
+        // Carica la lista delle categorie all'avvio
+        async function loadCategoriesList() {
+            if (!userID || userID === 0) {
+                document.getElementById('categoriesList').innerHTML = '<li class="item-list-empty">Utente non autenticato</li>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/categories?userId=${userID}`);
+                const data = await response.json();
+
+                const listContainer = document.getElementById('categoriesList');
+                if (Array.isArray(data) && data.length > 0) {
+                    listContainer.innerHTML = data.map(category => `
+                        <li class="item-list-item">
+                            <strong>${category.name}</strong>
+                            <span>Tipo: ${category.categoryType}</span>
+                            ${category.description ? `<small>${category.description}</small>` : ''}
+                        </li>
+                    `).join('');
+                } else {
+                    listContainer.innerHTML = '<li class="item-list-empty">Nessuna categoria trovata</li>';
+                }
+            } catch (error) {
+                document.getElementById('categoriesList').innerHTML = '<li class="item-list-empty">Errore nel caricamento</li>';
+            }
+        }
+
+        // Carica la lista al caricamento della pagina
+        loadCategoriesList();
+
+        document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            const loading = document.getElementById('loading');
+
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            loading.style.display = 'block';
+
+            try {
+                const formData = {
+                    userID: userID,
+                    name: document.getElementById('name').value,
+                    categoryType: document.getElementById('categoryType').value,
+                    description: document.getElementById('description').value || ''
+                };
+
+                const response = await fetch('/api/v1/categories', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    successMsg.textContent = `✓ Categoria creata con successo! ID: ${data.id}`;
+                    successMsg.style.display = 'block';
+                    document.getElementById('categoryForm').reset();
+                    loadCategoriesList(); // Ricarica la lista
+                } else {
+                    errorMsg.textContent = `✗ Errore: ${data.message || 'Si è verificato un errore'}`;
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                errorMsg.textContent = `✗ Errore di comunicazione: ${error.message}`;
+                errorMsg.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+        </div>
+    </div>
+</body>
+</html>

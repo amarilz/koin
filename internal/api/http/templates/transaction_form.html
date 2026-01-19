@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crea Transazione</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        /* Stili aggiuntivi specifici del form transazione */
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">
+                💰 Koin
+            </a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/transactions" class="active">Transazioni</a></li>
+                <li><a href="/forms/accounts">Account</a></li>
+                <li><a href="/forms/categories">Categorie</a></li>
+                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <div class="container">
+            <h1>Crea Transazione</h1>
+            <p class="subtitle">Aggiungi una nuova transazione al tuo account</p>
+
+            <div class="info-box">
+                💡 Compila il modulo sottostante per registrare una nuova transazione nel sistema.
+            </div>
+
+            <div class="success-message" id="successMessage"></div>
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="transactionForm" method="POST" action="/api/v1/expenses">
+            <div class="form-group">
+                <label for="accountName">Nome Account *</label>
+                <input 
+                    type="text" 
+                    id="accountName" 
+                    name="accountName" 
+                    placeholder="es. Portafoglio" 
+                    list="accountOptions"
+                    autocomplete="off"
+                    required
+                >
+                <datalist id="accountOptions"></datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="categoryType">Tipo Categoria *</label>
+                <select id="categoryType" name="categoryType" required>
+                    <option value="">-- Seleziona --</option>
+                    <option value="INCOME">Entrata</option>
+                    <option value="EXPENSE">Spesa</option>
+                    <option value="TRANSFER">Trasferimento</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="categoryNameGroup">
+                <label for="categoryName">Categoria *</label>
+                <input 
+                    type="text" 
+                    id="categoryName" 
+                    name="categoryName" 
+                    placeholder="es. Cibo" 
+                    list="categoryOptions"
+                    autocomplete="off"
+                    required
+                >
+                <datalist id="categoryOptions"></datalist>
+            </div>
+
+            <div class="form-group" id="transferAccountGroup" style="display: none;">
+                <label for="transferAccountName">Account di destinazione *</label>
+                <input 
+                    type="text" 
+                    id="transferAccountName" 
+                    name="transferAccountName" 
+                    placeholder="es. Conto Risparmio" 
+                    list="transferAccountOptions"
+                    autocomplete="off"
+                >
+                <datalist id="transferAccountOptions"></datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="amount">Importo (€) *</label>
+                <input 
+                    type="number" 
+                    id="amount" 
+                    name="amount" 
+                    placeholder="es. 25.50" 
+                    step="0.01" 
+                    min="0" 
+                    required
+                >
+                <small style="color: #666; font-size: 12px; margin-top: 4px; display: block;">
+                    L'importo verrà convertito in centesimi
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="occurredAt">Data *</label>
+                <input 
+                    type="date" 
+                    id="occurredAt" 
+                    name="occurredAt" 
+                    required
+                >
+            </div>
+
+            <div class="form-group" id="descriptionGroup">
+                <label for="description">Descrizione</label>
+                <textarea 
+                    id="description" 
+                    name="description" 
+                    placeholder="es. Pranzo al ristorante con colleghi" 
+                ></textarea>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-submit">
+                    Crea Transazione
+                </button>
+                <button type="reset" class="btn-reset">
+                    Azzera
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <span class="spinner"></span>
+                Invio in corso...
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Recupera l'userID dal contesto (passato dal template backend)
+        const userID = {{ .userID }} || 0;
+        const categoriesByType = new Map();
+
+        const accountOptions = document.getElementById('accountOptions');
+        const transferAccountOptions = document.getElementById('transferAccountOptions');
+        const transferAccountGroup = document.getElementById('transferAccountGroup');
+        const transferAccountInput = document.getElementById('transferAccountName');
+        const categoryNameGroup = document.getElementById('categoryNameGroup');
+        const categoryOptions = document.getElementById('categoryOptions');
+        const categoryInput = document.getElementById('categoryName');
+        const categoryTypeSelect = document.getElementById('categoryType');
+        const descriptionGroup = document.getElementById('descriptionGroup');
+        const descriptionInput = document.getElementById('description');
+
+        function populateDatalist(datalist, values) {
+            datalist.innerHTML = '';
+            values.forEach((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                datalist.appendChild(option);
+            });
+        }
+
+        async function loadAccountOptions() {
+            if (!userID) {
+                populateDatalist(accountOptions, []);
+                populateDatalist(transferAccountOptions, []);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/accounts?userId=${userID}`);
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    const accountNames = data.map((account) => account.name);
+                    populateDatalist(accountOptions, accountNames);
+                    populateDatalist(transferAccountOptions, accountNames);
+                }
+            } catch (error) {
+                populateDatalist(accountOptions, []);
+                populateDatalist(transferAccountOptions, []);
+            }
+        }
+
+        async function loadCategoryOptions() {
+            if (!userID) {
+                populateDatalist(categoryOptions, []);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/categories?userId=${userID}`);
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    categoriesByType.clear();
+                    data.forEach((category) => {
+                        if (category && category.name) {
+                            const typeKey = category.categoryType || '';
+                            const list = categoriesByType.get(typeKey) || [];
+                            list.push(category.name);
+                            categoriesByType.set(typeKey, list);
+                        }
+                    });
+                }
+            } catch (error) {
+                populateDatalist(categoryOptions, []);
+            }
+        }
+
+        // Imposta la data odierna come valore di default
+        document.getElementById('occurredAt').valueAsDate = new Date();
+
+        function updateCategoryOptionsByType() {
+            const selectedType = categoryTypeSelect.value;
+            const categories = categoriesByType.get(selectedType) || [];
+            populateDatalist(categoryOptions, categories);
+        }
+
+        categoryTypeSelect.addEventListener('change', () => {
+            categoryInput.value = '';
+            transferAccountInput.value = '';
+            const isTransfer = categoryTypeSelect.value === 'TRANSFER';
+            transferAccountInput.required = isTransfer;
+            transferAccountGroup.style.display = isTransfer ? 'block' : 'none';
+            categoryInput.required = !isTransfer;
+            categoryNameGroup.style.display = isTransfer ? 'none' : 'block';
+            // description is optional now
+            descriptionGroup.style.display = isTransfer ? 'none' : 'block';
+            if (isTransfer) {
+                descriptionInput.value = 'Trasferimento tra account';
+            }
+            updateCategoryOptionsByType();
+        });
+
+        loadAccountOptions();
+        loadCategoryOptions().then(updateCategoryOptionsByType);
+        transferAccountInput.required = categoryTypeSelect.value === 'TRANSFER';
+        transferAccountGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'block' : 'none';
+        categoryInput.required = categoryTypeSelect.value !== 'TRANSFER';
+        categoryNameGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'none' : 'block';
+        // description is optional now
+        descriptionGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'none' : 'block';
+        if (categoryTypeSelect.value === 'TRANSFER') {
+            descriptionInput.value = 'Trasferimento tra account';
+        }
+
+        document.getElementById('transactionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            const loading = document.getElementById('loading');
+
+            // Nascondi messaggi precedenti
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            loading.style.display = 'block';
+
+            try {
+                // Raccogli i dati del form
+                const categoryType = document.getElementById('categoryType').value;
+                let amountValue = Math.round(parseFloat(document.getElementById('amount').value) * 100);
+                if (categoryType === 'EXPENSE') {
+                    amountValue = -Math.abs(amountValue);
+                } else {
+                    amountValue = Math.abs(amountValue);
+                }
+                const occurredAtValue = document.getElementById('occurredAt').value;
+                const descriptionValue = descriptionInput.value;
+                let endpoint = '/api/v1/expenses';
+                let formData = {};
+
+                if (categoryType === 'TRANSFER') {
+                    endpoint = '/api/v1/transfers';
+                    const transferDescription = descriptionValue.trim() || 'Trasferimento tra account';
+                    formData = {
+                        userId: userID,
+                        accountFrom: document.getElementById('accountName').value,
+                        accountTo: document.getElementById('transferAccountName').value,
+                        amount: amountValue,
+                        occurredAt: occurredAtValue,
+                        description: transferDescription
+                    };
+                } else {
+                    formData = {
+                        userId: userID,
+                        accountName: document.getElementById('accountName').value,
+                        categoryName: document.getElementById('categoryName').value,
+                        categoryType: categoryType,
+                        amount: amountValue,
+                        occurredAt: occurredAtValue,
+                        description: descriptionValue.trim() || null
+                    };
+                }
+
+                // Invia la richiesta
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    successMsg.textContent = `✓ Operazione completata con successo! ID: ${data.transactionId}`;
+                    successMsg.style.display = 'block';
+                    document.getElementById('transactionForm').reset();
+                    document.getElementById('occurredAt').valueAsDate = new Date();
+                    transferAccountInput.required = categoryTypeSelect.value === 'TRANSFER';
+                    transferAccountGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'block' : 'none';
+                    categoryInput.required = categoryTypeSelect.value !== 'TRANSFER';
+                    categoryNameGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'none' : 'block';
+                    // description is optional now
+                    descriptionGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'none' : 'block';
+                    if (categoryTypeSelect.value === 'TRANSFER') {
+                        descriptionInput.value = 'Trasferimento tra account';
+                    }
+                } else {
+                    errorMsg.textContent = `✗ Errore: ${data.message || 'Si è verificato un errore'}`;
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                errorMsg.textContent = `✗ Errore di comunicazione: ${error.message}`;
+                errorMsg.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrazione - Koin</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        .signup-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .signup-container h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+        }
+
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .form-group button:hover {
+            background: #45a049;
+        }
+
+        .error-message {
+            color: #d32f2f;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .success-message {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .form-footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-footer a {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .form-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .password-requirements {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .password-requirements li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">
+                💰 Koin
+            </a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/transactions">Transazioni</a></li>
+                <li><a href="/forms/accounts">Account</a></li>
+                <li><a href="/forms/categories">Categorie</a></li>
+                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="signup-container">
+        <h1>Crea Account</h1>
+        
+        {{ if .Error }}
+        <div class="error-message">{{ .Error }}</div>
+        {{ end }}
+        
+        {{ if .Success }}
+        <div class="success-message">{{ .Success }}</div>
+        {{ end }}
+
+        <form method="POST" action="/signup">
+            <div class="form-group">
+                <label for="email">Email *</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    placeholder="inserisci la tua email"
+                    required
+                    {{ if .Email }}value="{{ .Email }}"{{ end }}
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password *</label>
+                <div class="password-requirements">
+                    La password deve contenere:
+                    <ul>
+                        <li>✓ Almeno 8 caratteri</li>
+                        <li>✓ Almeno una lettera maiuscola</li>
+                        <li>✓ Almeno un numero</li>
+                    </ul>
+                </div>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    placeholder="inserisci una password sicura"
+                    required
+                    minlength="8"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password_confirm">Conferma Password *</label>
+                <input 
+                    type="password" 
+                    id="password_confirm" 
+                    name="password_confirm" 
+                    placeholder="conferma la password"
+                    required
+                    minlength="8"
+                >
+            </div>
+
+            <div class="form-group">
+                <button type="submit">Registrati</button>
+            </div>
+        </form>
+
+        <div class="form-footer">
+            Hai già un account? <a href="/login">Accedi qui</a>
+        </div>
+    </div>
+
+    <script>
+        // Validazione password lato client
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = document.getElementById('password').value;
+            const passwordConfirm = document.getElementById('password_confirm').value;
+
+            // Validazione lunghezza
+            if (password.length < 8) {
+                e.preventDefault();
+                alert('La password deve contenere almeno 8 caratteri');
+                return;
+            }
+
+            // Validazione maiuscola
+            if (!/[A-Z]/.test(password)) {
+                e.preventDefault();
+                alert('La password deve contenere almeno una lettera maiuscola');
+                return;
+            }
+
+            // Validazione numero
+            if (!/[0-9]/.test(password)) {
+                e.preventDefault();
+                alert('La password deve contenere almeno un numero');
+                return;
+            }
+
+            // Validazione conferma password
+            if (password !== passwordConfirm) {
+                e.preventDefault();
+                alert('Le password non corrispondono');
+                return;
+            }
+        });
+    </script>
+</body>
+</html>
