@@ -1,0 +1,641 @@
+openapi: 3.0.3
+info:
+  title: Koin API
+  version: 1.0.0
+  description: CRUD REST API per la gestione delle spese (expenses). Autenticazione via Bearer JWT.
+
+servers:
+  - url: http://localhost:8080/
+
+tags:
+  - name: Expenses
+    description: Operazioni CRUD sulle spese
+  - name: Users
+    description: Operazioni CRUD sugli utenti
+  - name: Accounts
+    description: Operazioni CRUD sugli utenti
+  - name: Categories
+    description: Operazioni CRUD sulle categorie
+  - name: Transfers
+    description: Operazioni di trasferimento tra account
+  - name: Transactions
+    description: Lettura delle transazioni
+
+paths:
+  /v1/users:
+    post:
+      tags: [ Users ]
+      summary: Crea un nuovo utente
+      operationId: createUser
+      requestBody:
+        $ref: '#/components/requestBodies/CreateUserRequestBody'
+      responses:
+        "201":
+          description: Utente creato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateUserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  
+  /v1/accounts:
+    post:
+      tags: [ Accounts ]
+      summary: Crea un nuovo account
+      operationId: createAccount
+      requestBody:
+        $ref: '#/components/requestBodies/CreateAccountRequestBody'
+      responses:
+        "201":
+          description: Utente creato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [ Accounts ]
+      summary: Ottieni lista di account
+      operationId: getAccounts
+      parameters:
+        - name: userId
+          in: query
+          description: ID dell'utente
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Lista di account
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/categories:
+    post:
+      tags: [ Categories ]
+      summary: Crea una nuova categoria
+      operationId: createCategory
+      requestBody:
+        $ref: '#/components/requestBodies/CreateCategoryRequestBody'
+      responses:
+        "201":
+          description: Categoria creata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateCategoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [ Categories ]
+      summary: Ottieni lista di categorie
+      operationId: getCategories
+      parameters:
+        - name: userId
+          in: query
+          description: ID dell'utente
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Lista di categorie
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/transactions:
+    get:
+      tags: [ Transactions ]
+      summary: Ottieni le ultime transazioni
+      operationId: getRecentTransactions
+      parameters:
+        - name: userId
+          in: query
+          description: ID dell'utente
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: Numero massimo di elementi
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: Lista di transazioni
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransactionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/expenses:
+
+    post:
+      tags: [ Expenses ]
+      summary: Crea una spesa
+      operationId: addTransaction
+      requestBody:
+        $ref: '#/components/requestBodies/AddTransactionRequestBody'
+      responses:
+        "201":
+          description: Spesa creata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddTransactionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/transfers:
+    post:
+      tags: [ Transfers ]
+      summary: Trasferisci denaro tra account
+      operationId: transferBetweenAccounts
+      requestBody:
+        $ref: '#/components/requestBodies/TransferBetweenAccountsRequestBody'
+      responses:
+        "201":
+          description: Trasferimento creato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferBetweenAccountsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  requestBodies:
+    CreateUserRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateUserRequest"
+    CreateAccountRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateAccountRequest"
+    CreateCategoryRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateCategoryRequest"
+    AddTransactionRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AddTransactionRequest"
+
+    TransferBetweenAccountsRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TransferBetweenAccountsRequest"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ExpenseId:
+      name: expenseId
+      in: path
+      required: true
+      description: ID della spesa (UUID/ULID consigliato)
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+      example: exp_01HZX9J2Q9W0ZKJH2W8Y7Y7Q9A
+
+  schemas:
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        password:
+          type: string
+
+    CreateUserResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          example: "john@example.com"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-18T10:15:00Z"
+
+    CreateAccountRequest:
+      type: object
+      required:
+        - userId
+        - name
+        - currency
+        - initialBalance
+      properties:
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        currency:
+          type: string
+        initialBalance:
+          type: integer
+          format: int64
+
+    CreateAccountResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        currency:
+          type: string
+        initialBalance:
+          type: integer
+          format: int64
+
+    CreateCategoryRequest:
+      type: object
+      required:
+        - userId
+        - name
+        - categoryType
+      properties:
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        categoryType:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    CreateCategoryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        categoryType:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    AccountItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        currency:
+          type: string
+        initialBalance:
+          type: integer
+          format: int64
+        currentBalance:
+          type: integer
+          format: int64
+
+    CategoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        categoryType:
+          type: string
+
+    AddTransactionRequest:
+      type: object
+      required:
+        - userId
+        - accountName
+        - categoryName
+        - categoryType
+        - amount
+        - occurredAt
+        - description
+      properties:
+        userId:
+          type: integer
+          format: int64
+        accountName:
+          type: string
+        categoryName:
+          type: string
+        categoryType:
+          type: string
+        amount:
+          type: integer
+          format: int64
+          example: 30 # 3000 = 30 euro
+        occurredAt:
+          type: string
+          format: date
+          example: "2026-01-17"
+        description:
+          type: string
+          nullable: false
+          example: "Pranzo"
+
+    AddTransactionResponse:
+      type: object
+      properties:
+        transactionId:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+
+    TransactionItem:
+      type: object
+      properties:
+        transactionId:
+          type: integer
+          format: int64
+        occurredAt:
+          type: string
+          format: date
+        accountName:
+          type: string
+        categoryName:
+          type: string
+          nullable: true
+        categoryType:
+          type: string
+          nullable: true
+        amount:
+          type: integer
+          format: int64
+        description:
+          type: string
+
+    TransferBetweenAccountsRequest:
+      type: object
+      required:
+        - userId
+        - accountFrom
+        - accountTo
+        - amount
+        - occurredAt
+      properties:
+        userId:
+          type: integer
+          format: int64
+        accountFrom:
+          type: string
+        accountTo:
+          type: string
+        amount:
+          type: integer
+          format: int64
+          example: 3000
+        occurredAt:
+          type: string
+          format: date
+          example: "2026-01-17"
+        description:
+          type: string
+          nullable: true
+
+    TransferBetweenAccountsResponse:
+      type: object
+      properties:
+        transactionId:
+          type: integer
+          format: int64
+          description: Importo in minor unit (es. centesimi per EUR).
+          example: 1299
+        occurredAt:
+          type: string
+          format: date-time
+          description: Data/ora in cui la spesa è avvenuta (ISO-8601).
+          example: "2026-01-17T10:15:00Z"
+        categoryName:
+          type: string
+          nullable: true
+          description: ID categoria (se gestisci categorie).
+          example: cat_food
+        description:
+          type: string
+          nullable: false
+          description: Nota libera
+          example: "Scarpe Nike"
+
+    ExpenseUpdateRequest:
+      type: object
+      description: Tutti i campi sono opzionali; invia solo quelli da modificare.
+      properties:
+        amountMinor:
+          type: integer
+          example: 1399
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: EUR
+        occurredAt:
+          type: string
+          format: date-time
+          example: "2026-01-17T10:15:00Z"
+        categoryId:
+          type: string
+          nullable: true
+          example: cat_food
+        note:
+          type: string
+          nullable: true
+          maxLength: 2048
+          example: "Pranzo con cliente"
+        merchant:
+          type: string
+          nullable: true
+          maxLength: 256
+          example: "Ristorante Roma"
+        paymentMethod:
+          type: string
+          nullable: true
+          maxLength: 64
+          example: "card"
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+          example: [ "trasferta" ]
+        deleted:
+          type: boolean
+          description: Permette soft-delete via PATCH (alternativa a DELETE).
+          example: false
+        version:
+          type: integer
+          minimum: 1
+          description: Versione attesa (se usi concorrenza ottimistica via body).
+          example: 7
+
+    ErrorResponse:
+      type: object
+      required: [ code, message ]
+      properties:
+        code:
+          type: string
+          description: Codice errore applicativo.
+          example: invalid_request
+        message:
+          type: string
+          description: Messaggio leggibile.
+          example: "Campo 'currency' non valido"
+        details:
+          type: object
+          additionalProperties: true
+          description: Dettagli opzionali (es. campi invalidi).
+          example:
+            field: currency
+            reason: must_be_iso_4217
+
+  responses:
+    BadRequest:
+      description: Richiesta non valida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: invalid_request
+            message: "Parametri query non validi"
+    Unauthorized:
+      description: Non autorizzato (token mancante o invalido)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: unauthorized
+            message: "Token non valido o scaduto"
+    NotFound:
+      description: Risorsa non trovata
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: not_found
+            message: "Spesa non trovata"
+    Conflict:
+      description: Conflitto (es. concorrenza ottimistica / duplicato idempotency)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: conflict
+            message: "Versione non aggiornata"
+            details:
+              expectedVersion: 8
+              providedVersion: 7
+    PreconditionFailed:
+      description: Precondizione fallita (es. ETag If-Match)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: precondition_failed
+            message: "ETag non corrispondente"
+    InternalError:
+      description: Errore interno
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: internal_error
+            message: "Errore inatteso"

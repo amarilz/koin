@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crea Account</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        /* Stili aggiuntivi specifici del form account */
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">
+                💰 Koin
+            </a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/transactions">Transazioni</a></li>
+                <li><a href="/forms/accounts" class="active">Account</a></li>
+                <li><a href="/forms/categories">Categorie</a></li>
+                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <div class="container-wrapper">
+            <div class="container">
+            <h1>Crea Account</h1>
+            <p class="subtitle">Crea un nuovo account per gestire le tue finanze</p>
+
+            <div class="info-box">
+                💡 Compila il modulo per creare un nuovo account con il saldo iniziale.
+            </div>
+
+            <div class="success-message" id="successMessage"></div>
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="accountForm" method="POST" action="/api/v1/accounts">
+            <input type="hidden" id="userId" name="userId" value="{{ .userID }}">
+
+            <div class="form-group">
+                <label for="name">Nome Account *</label>
+                <input 
+                    type="text" 
+                    id="name" 
+                    name="name" 
+                    placeholder="es. Conto Corrente, Portafoglio" 
+                    required
+                >
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="currency">Valuta *</label>
+                    <select id="currency" name="currency" required>
+                        <option value="">-- Seleziona --</option>
+                        <option value="EUR">EUR - Euro</option>
+                        <option value="USD">USD - Dollaro USA</option>
+                        <option value="GBP">GBP - Sterlina</option>
+                        <option value="JPY">JPY - Yen</option>
+                        <option value="CHF">CHF - Franco Svizzero</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="initialBalance">Saldo Iniziale (€) *</label>
+                    <input 
+                        type="text" 
+                        id="initialBalance" 
+                        name="initialBalance" 
+                        placeholder="es. 1000" 
+                        required
+                    >
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-submit">
+                    Crea Account
+                </button>
+                <button type="reset" class="btn-reset">
+                    Azzera
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <span class="spinner"></span>
+                Invio in corso...
+            </div>
+        </form>
+    </div>
+
+    <div class="card-list">
+        <h2>I Tuoi Account</h2>
+        <ul class="item-list" id="accountsList">
+            <li class="item-list-empty">Caricamento...</li>
+        </ul>
+    </div>
+        </div>
+    </div>
+
+    <script>
+        // Estrae il userId dai cookie della sessione
+        function getUserId() {
+            return parseInt(document.getElementById('userId').value) || 0;
+        }
+
+        // Carica la lista degli account all'avvio
+        async function loadAccountsList() {
+            const userId = getUserId();
+            if (!userId) {
+                document.getElementById('accountsList').innerHTML = '<li class="item-list-empty">Caricamento...</li>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/accounts?userId=${userId}`);
+                const data = await response.json();
+
+                const listContainer = document.getElementById('accountsList');
+                if (Array.isArray(data) && data.length > 0) {
+                    listContainer.innerHTML = data.map(account => `
+                        <li class="item-list-item">
+                            <strong>${account.name}</strong>
+                            <span>${account.currency} - Saldo iniziale: ${(account.initialBalance / 100).toFixed(2)}</span>
+                        </li>
+                    `).join('');
+                } else {
+                    listContainer.innerHTML = '<li class="item-list-empty">Nessun account trovato</li>';
+                }
+            } catch (error) {
+                document.getElementById('accountsList').innerHTML = '<li class="item-list-empty\">Errore nel caricamento</li>';
+            }
+        }
+
+        // Carica la lista al caricamento della pagina
+        window.addEventListener('DOMContentLoaded', loadAccountsList);
+
+        // Ricarica la lista dopo il submit del form
+        document.getElementById('accountForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            const loading = document.getElementById('loading');
+
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            loading.style.display = 'block';
+
+            try {
+                const formData = {
+                    userId: parseInt(document.getElementById('userId').value),
+                    name: document.getElementById('name').value,
+                    currency: document.getElementById('currency').value,
+                    initialBalance: Math.round(parseFloat(document.getElementById('initialBalance').value) * 100)
+                };
+
+                const response = await fetch('/api/v1/accounts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    successMsg.textContent = `✓ Account creato con successo! ID: ${data.id}`;
+                    successMsg.style.display = 'block';
+                    // Reset del form ma mantiene lo userId
+                    document.getElementById('name').value = '';
+                    document.getElementById('currency').value = '';
+                    document.getElementById('initialBalance').value = '';
+                    loadAccountsList(); // Ricarica la lista
+                } else {
+                    errorMsg.textContent = `✗ Errore: ${data.message || 'Si è verificato un errore'}`;
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                errorMsg.textContent = `✗ Errore di comunicazione: ${error.message}`;
+                errorMsg.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+        </div>
+    </div>
+</body>
+</html>
