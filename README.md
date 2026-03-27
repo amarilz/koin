@@ -1,9 +1,7 @@
 # koin
 
-### Execute backup (binary dump)
-```bash
-./scripts/backup_and_stop_db.sh
-```
+### Automatic backups (cron sidecar)
+This project includes a lightweight backup sidecar service (`pg-backup`) in `compose.yaml` that runs scheduled `pg_dump` jobs and writes binary dumps to the backup folder.
 
 ### Restore backup
 ```bash
