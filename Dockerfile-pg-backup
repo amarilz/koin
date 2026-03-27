@@ -1,0 +1,17 @@
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates wget gnupg2 lsb-release busybox-static bash \
+  && echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client-18 \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /etc/crontabs && chmod 0755 /etc/crontabs
+
+COPY scripts/pg_backup_inside.sh /scripts/pg_backup_inside.sh
+RUN chmod +x /scripts/pg_backup_inside.sh
+
+ENTRYPOINT ["/bin/sh", "-c", "INTERVAL=${BACKUP_INTERVAL_SECONDS:-60}; echo \"Starting backup loop (interval=$INTERVAL seconds)\"; while true; do /scripts/pg_backup_inside.sh || true; sleep \"$INTERVAL\"; done"]

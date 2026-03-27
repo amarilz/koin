@@ -39,6 +39,27 @@ services:
     networks:
       - postgres_network
 
+  pg-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile-pg-backup
+    image: koin-pg-backup:local
+    container_name: pg-backup
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: "${DB_HOST:-postgres}"
+      DB_PORT: "${DB_PORT:-5432}"
+      DB_NAME: "${DB_NAME:-koin_db}"
+      DB_USER: "${DB_USER:-koin_user}"
+      DB_PASS: "${DB_PASSWORD:-koin_password}"
+      BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-86400}"
+    volumes:
+      - "${BACKUP_BASE_PATH}:/backups"
+    networks:
+      - postgres_network
+
 volumes:
   postgres_data:
 
