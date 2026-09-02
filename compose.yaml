@@ -1,23 +1,56 @@
 version: "3.9"
 
 services:
-  postgres:
+  koin-postgres:
     image: postgres:18
-    container_name: postgres
+    container_name: koin-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: "${DB_NAME:-koin_db}"
-      POSTGRES_USER: "${DB_USER:-koin_user}"
-      POSTGRES_PASSWORD: "${DB_PASSWORD:-koin_password}"
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
-      - "${BACKUP_BASE_PATH:-./db_backups}:/backups"
     networks:
-      - postgres_network
+      - koin_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER} -d ${DB_NAME}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  app:
+  postgres-backup-sidecar:
+    image: amarilz/postgres-backup-sidecar:0.0.1
+    container_name: postgres-backup-sidecar
+    restart: unless-stopped
+    depends_on:
+      koin-postgres:
+        condition: service_healthy
+    stop_grace_period: 2m
+    environment:
+      PGHOST: koin-postgres
+      PGPORT: 5432
+      PGDATABASE: "${DB_NAME}"
+      PGUSER: "${DB_USER}"
+      PGPASSWORD: "${DB_PASSWORD}"
+      BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-86400}"
+      BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-14}"
+      BACKUP_COMPRESSION: "${BACKUP_COMPRESSION:-gzip:6}"
+      BACKUP_ON_START: "false"
+      BACKUP_ON_SHUTDOWN: "true"
+    volumes:
+      - "${BACKUP_BASE_PATH}:/backups"
+    networks:
+      - koin_network
+
+  koin-app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -27,43 +60,19 @@ services:
     container_name: koin
     restart: unless-stopped
     depends_on:
-      - postgres
+      - koin-postgres
     environment:
-      - DATABASE_URL=postgres://${DB_USER:-koin_user}:${DB_PASSWORD:-koin_password}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-koin_db}?sslmode=disable
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@koin-postgres:5432/${DB_NAME}?sslmode=disable
       - API_TOKEN=${API_TOKEN:-dev-token}
-      - BACKUP_BASE_PATH=${BACKUP_BASE_PATH:-./db_backups}
     ports:
       - "8080:8080"
-    volumes:
-      - "${BACKUP_BASE_PATH:-./db_backups}:/backups"
     networks:
-      - postgres_network
-
-  pg-backup:
-    build:
-      context: .
-      dockerfile: Dockerfile-pg-backup
-    image: koin-pg-backup:local
-    container_name: pg-backup
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    environment:
-      DB_HOST: "${DB_HOST:-postgres}"
-      DB_PORT: "${DB_PORT:-5432}"
-      DB_NAME: "${DB_NAME:-koin_db}"
-      DB_USER: "${DB_USER:-koin_user}"
-      DB_PASS: "${DB_PASSWORD:-koin_password}"
-      BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-86400}"
-    volumes:
-      - "${BACKUP_BASE_PATH}:/backups"
-    networks:
-      - postgres_network
+      - koin_network
 
 volumes:
   postgres_data:
 
 networks:
-  postgres_network:
-    name: postgres_network
+  koin_network:
+    name: koin_network
     driver: bridge
