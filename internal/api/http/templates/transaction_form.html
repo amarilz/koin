@@ -277,8 +277,6 @@
                     if (response.ok) {
                         successMsg.textContent = `✓ Operazione completata con successo! ID: ${data.transactionId}`;
                         successMsg.style.display = 'block';
-                        document.getElementById('transactionForm').reset();
-                        document.getElementById('occurredAt').valueAsDate = new Date();
                         transferAccountInput.required = categoryTypeSelect.value === 'TRANSFER';
                         transferAccountGroup.style.display = categoryTypeSelect.value === 'TRANSFER' ? 'block' : 'none';
                         categoryInput.required = categoryTypeSelect.value !== 'TRANSFER';
