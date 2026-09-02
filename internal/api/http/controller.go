@@ -316,6 +316,14 @@ func (ctrl *Controller) TransferBetweenAccounts(ctx context.Context, request api
 
 	transactionID, err := ctrl.accountService.TransferBetweenAccounts(ctx, transferDto)
 	if err != nil {
+		if errors.Is(err, errs.ErrConflict) {
+			return apigen.TransferBetweenAccounts409JSONResponse{
+				ConflictJSONResponse: apigen.ConflictJSONResponse{
+					Code:    "CONFLICT",
+					Message: err.Error(),
+				},
+			}, nil
+		}
 		if errors.Is(err, errs.ErrAccountNotFound) || errors.Is(err, errs.ErrUserNotFound) || errors.Is(err, errs.ErrNotFound) {
 			return apigen.TransferBetweenAccounts400JSONResponse{
 				BadRequestJSONResponse: apigen.BadRequestJSONResponse{

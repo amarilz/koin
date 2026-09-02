@@ -1,6 +1,8 @@
 package http
 
 import (
+	"net/http"
+
 	apigen "koin/internal/api/generated"
 	"koin/internal/service"
 
@@ -26,6 +28,17 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	// Setup sessioni
 	store := cookie.NewStore([]byte("secret-key"))
 	r.Use(sessions.Sessions("koin-session", store))
+
+	// Redirect dalla root (/) a /login
+	r.GET("/", func(c *gin.Context) {
+		session := sessions.Default(c)
+		// Se l'utente è già autenticato va direttamente ai form, altrimenti a /login
+		if userID := session.Get("user_id"); userID != nil {
+			c.Redirect(http.StatusFound, "/forms")
+			return
+		}
+		c.Redirect(http.StatusFound, "/login")
+	})
 
 	// Rotte pubbliche (senza autenticazione)
 	r.GET("/login", LoginPage)
