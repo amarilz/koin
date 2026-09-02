@@ -61,6 +61,35 @@ VALUES ($1,
         $4,
         $5);
 
+-- name: IsDuplicateTransaction :one
+SELECT EXISTS (
+    SELECT 1
+    FROM transactions t
+             JOIN transaction_entries te ON te.transaction_id = t.id
+    WHERE t.user_id = $1
+      AND t.occurred_at = $2
+      AND te.account_id = $3
+      AND te.category_id = $4
+      AND te.amount = $5
+      AND te.description IS NOT DISTINCT FROM $6
+);
+
+-- name: IsDuplicateTransfer :one
+SELECT EXISTS (
+    SELECT 1
+    FROM transactions t
+             JOIN transaction_entries source_entry ON source_entry.transaction_id = t.id
+             JOIN transaction_entries destination_entry ON destination_entry.transaction_id = t.id
+    WHERE t.user_id = $1
+      AND t.occurred_at = $2
+      AND source_entry.account_id = $3
+      AND destination_entry.account_id = $4
+      AND source_entry.amount = $5
+      AND destination_entry.amount = -$5
+      AND source_entry.description IS NOT DISTINCT FROM $6
+      AND destination_entry.description IS NOT DISTINCT FROM $6
+);
+
 -- name: GetAccountsByUser :many
 SELECT id, user_id, name, currency, initial_balance
 FROM ACCOUNTS

@@ -51,6 +51,31 @@ func (repo *AccountRepository) GetAccount(ctx context.Context, user dbgen.User, 
 }
 
 func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.User, account dbgen.Account, category dbgen.Category, addExpenseDto dto.AddTransactionDto) (int64, error) {
+	description := sql.NullString{
+		String: func() string {
+			if addExpenseDto.Description == nil {
+				return ""
+			}
+			return *addExpenseDto.Description
+		}(),
+		Valid: addExpenseDto.Description != nil,
+	}
+
+	duplicate, err := repo.queries.IsDuplicateTransaction(ctx, dbgen.IsDuplicateTransactionParams{
+		UserID:      user.ID,
+		OccurredAt:  addExpenseDto.OccurredAt,
+		AccountID:   account.ID,
+		CategoryID:  sql.NullInt64{Int64: category.ID, Valid: true},
+		Amount:      addExpenseDto.Amount,
+		Description: description,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if duplicate {
+		return 0, fmt.Errorf("%w: transazione già esistente", apierr.ErrConflict)
+	}
+
 	transactionId, err := repo.queries.AddTransaction(ctx, dbgen.AddTransactionParams{
 		UserID:     user.ID,
 		OccurredAt: addExpenseDto.OccurredAt,
@@ -66,16 +91,8 @@ func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.Us
 			Int64: category.ID,
 			Valid: true,
 		},
-		Amount: addExpenseDto.Amount,
-		Description: sql.NullString{
-			String: func() string {
-				if addExpenseDto.Description == nil {
-					return ""
-				}
-				return *addExpenseDto.Description
-			}(),
-			Valid: addExpenseDto.Description != nil,
-		},
+		Amount:      addExpenseDto.Amount,
+		Description: description,
 	})
 	if err != nil {
 		return 0, err
@@ -125,6 +142,30 @@ func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, user
 
 	queries := repo.queries.WithTx(tx)
 
+	var descStr string
+	if transfer.Description == nil || *transfer.Description == "" {
+		descStr = "Trasferimento tra account"
+	} else {
+		descStr = *transfer.Description
+	}
+
+	duplicate, err := queries.IsDuplicateTransfer(ctx, dbgen.IsDuplicateTransferParams{
+		UserID:      user.ID,
+		OccurredAt:  transfer.OccurredAt,
+		AccountID:   fromAccount.ID,
+		AccountID_2: toAccount.ID,
+		Amount:      transfer.Amount,
+		Description: sql.NullString{String: descStr, Valid: true},
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	if duplicate {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("%w: trasferimento già esistente", apierr.ErrConflict)
+	}
+
 	balance, err := queries.GetAccountBalance(ctx, fromAccount.ID)
 	if err != nil {
 		_ = tx.Rollback()
@@ -143,13 +184,6 @@ func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, user
 	if err != nil {
 		_ = tx.Rollback()
 		return 0, err
-	}
-
-	var descStr string
-	if transfer.Description == nil || *transfer.Description == "" {
-		descStr = "Trasferimento tra account"
-	} else {
-		descStr = *transfer.Description
 	}
 
 	err = queries.AddTransactionEntry(ctx, dbgen.AddTransactionEntryParams{
