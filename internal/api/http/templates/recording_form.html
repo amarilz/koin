@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrazioni vocali</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        .recording-container {
+            max-width: 640px;
+        }
+
+        .recording-status {
+            min-height: 24px;
+            margin: 20px 0;
+            color: #555;
+            text-align: center;
+        }
+
+        .recording-timer {
+            margin: 24px 0;
+            color: #333;
+            font-size: 40px;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+        }
+
+        .recording-player {
+            width: 100%;
+            margin: 12px 0;
+        }
+
+        .recording-container .button-group {
+            margin-top: 20px;
+        }
+
+        .btn-record {
+            background: #c62828;
+            color: white;
+        }
+
+        .btn-stop {
+            background: #555;
+            color: white;
+        }
+
+        .btn-delete {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+        }
+
+        @media (max-width: 600px) {
+            .recording-container .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">💰 Koin</a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/transactions">Transazioni</a></li>
+                <li><a href="/forms/accounts">Account</a></li>
+                <li><a href="/forms/categories">Categorie</a></li>
+                <li><a href="/forms/recordings" class="active">Registrazioni</a></li>
+                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <section class="container recording-container">
+            <h1>Registrazione vocale</h1>
+            <p class="subtitle">Registra un audio, riascoltalo e conferma per salvarlo.</p>
+
+            <div class="info-box">La registrazione viene salvata solo dopo la conferma. Puoi eliminarla in qualsiasi momento prima di salvarla. Dimensione massima: 25 MB.</div>
+            <div class="success-message" id="successMessage" role="status"></div>
+            <div class="error-message" id="errorMessage" role="alert"></div>
+            <p class="recording-status" id="recordingStatus" aria-live="polite">Pronto per registrare.</p>
+            <div class="recording-timer" id="recordingTimer" aria-label="Durata">00:00</div>
+            <audio class="recording-player" id="recordingPlayer" controls hidden></audio>
+
+            <div class="button-group">
+                <button type="button" class="btn-record" id="startButton">Avvia registrazione</button>
+                <button type="button" class="btn-stop" id="stopButton" disabled>Ferma</button>
+            </div>
+            <div class="button-group" id="reviewActions" hidden>
+                <button type="button" class="btn-submit" id="confirmButton">Conferma e salva</button>
+                <button type="button" class="btn-delete" id="deleteButton">Elimina registrazione</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const confirmButton = document.getElementById('confirmButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const reviewActions = document.getElementById('reviewActions');
+        const recordingPlayer = document.getElementById('recordingPlayer');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const recordingTimer = document.getElementById('recordingTimer');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const maxAudioBytes = 25 * 1024 * 1024;
+
+        let mediaRecorder;
+        let mediaStream;
+        let audioChunks = [];
+        let audioSize = 0;
+        let audioBlob;
+        let audioURL;
+        let recordingStartedAt = 0;
+        let durationMS = 0;
+        let timerInterval;
+
+        function formatDuration(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${seconds}`;
+        }
+
+        function stopTracks() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+        }
+
+        function discardRecording() {
+            if (audioURL) {
+                URL.revokeObjectURL(audioURL);
+                audioURL = null;
+            }
+            audioBlob = null;
+            audioChunks = [];
+            recordingPlayer.removeAttribute('src');
+            recordingPlayer.hidden = true;
+            reviewActions.hidden = true;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            recordingTimer.textContent = '00:00';
+            recordingStatus.textContent = 'Registrazione eliminata. Puoi registrarne una nuova.';
+        }
+
+        startButton.addEventListener('click', async () => {
+            successMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+            startButton.disabled = true;
+
+            try {
+                if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+                    throw new Error('Il browser non supporta la registrazione audio.');
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const preferredType = ['audio/webm;codecs=opus', 'audio/mp4']
+                    .find(type => MediaRecorder.isTypeSupported(type));
+                mediaRecorder = new MediaRecorder(mediaStream, preferredType ? { mimeType: preferredType } : undefined);
+                audioChunks = [];
+                audioSize = 0;
+                recordingStartedAt = Date.now();
+                durationMS = 0;
+
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        audioSize += event.data.size;
+                        if (audioSize > maxAudioBytes && mediaRecorder.state === 'recording') {
+                            durationMS = Date.now() - recordingStartedAt;
+                            mediaRecorder.stop();
+                        }
+                    }
+                });
+                mediaRecorder.addEventListener('stop', () => {
+                    clearInterval(timerInterval);
+                    stopTracks();
+                    audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                    audioChunks = [];
+                    if (audioBlob.size > maxAudioBytes) {
+                        discardRecording();
+                        errorMessage.textContent = 'La registrazione supera il limite di 25 MB. Prova con un audio più breve.';
+                        errorMessage.style.display = 'block';
+                        return;
+                    }
+                    if (audioURL) {
+                        URL.revokeObjectURL(audioURL);
+                    }
+                    audioURL = URL.createObjectURL(audioBlob);
+                    recordingPlayer.src = audioURL;
+                    recordingPlayer.hidden = false;
+                    reviewActions.hidden = false;
+                    startButton.disabled = true;
+                    recordingStatus.textContent = 'Ascolta la registrazione, poi conferma o eliminala.';
+                });
+                mediaRecorder.addEventListener('error', () => {
+                    clearInterval(timerInterval);
+                    stopTracks();
+                    stopButton.disabled = true;
+                    startButton.disabled = false;
+                    recordingStatus.textContent = 'Si è verificato un errore durante la registrazione.';
+                });
+
+                mediaRecorder.start(1000);
+                stopButton.disabled = false;
+                recordingStatus.textContent = 'Registrazione in corso...';
+                timerInterval = setInterval(() => {
+                    durationMS = Date.now() - recordingStartedAt;
+                    recordingTimer.textContent = formatDuration(durationMS);
+                }, 250);
+            } catch (error) {
+                stopTracks();
+                startButton.disabled = false;
+                errorMessage.textContent = error.message || 'Impossibile avviare la registrazione.';
+                errorMessage.style.display = 'block';
+                recordingStatus.textContent = 'Registrazione non avviata.';
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            if (mediaRecorder?.state === 'recording') {
+                durationMS = Date.now() - recordingStartedAt;
+                recordingTimer.textContent = formatDuration(durationMS);
+                stopButton.disabled = true;
+                mediaRecorder.stop();
+            }
+        });
+
+        deleteButton.addEventListener('click', () => {
+            if (mediaRecorder?.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            clearInterval(timerInterval);
+            stopTracks();
+            discardRecording();
+        });
+
+        confirmButton.addEventListener('click', async () => {
+            if (!audioBlob) {
+                return;
+            }
+
+            confirmButton.disabled = true;
+            deleteButton.disabled = true;
+            errorMessage.style.display = 'none';
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording');
+            formData.append('durationMs', String(durationMS));
+
+            try {
+                const response = await fetch('/forms/recordings', { method: 'POST', body: formData });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Impossibile salvare la registrazione.');
+                }
+
+                successMessage.textContent = `Registrazione salvata con successo (ID: ${result.id}).`;
+                successMessage.style.display = 'block';
+                discardRecording();
+                recordingStatus.textContent = 'Registrazione salvata. Puoi registrarne una nuova.';
+            } catch (error) {
+                errorMessage.textContent = error.message || 'Errore durante il salvataggio della registrazione.';
+                errorMessage.style.display = 'block';
+            } finally {
+                confirmButton.disabled = false;
+                deleteButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

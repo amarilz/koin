@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	apigen "koin/internal/api/generated"
+	"koin/internal/repository"
 	"koin/internal/service"
 
 	"github.com/gin-contrib/sessions"
@@ -15,6 +16,7 @@ type RouterDeps struct {
 	AuthToken   string
 	Controller  apigen.ServerInterface // importante: dipendenza sul contratto generato
 	UserService *service.UserService
+	Recordings  repository.VoiceRecordingRepository
 }
 
 func NewRouter(deps RouterDeps) *gin.Engine {
@@ -64,6 +66,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 		protected.GET("/transactions", ServeFormWithUserID("transaction_form.html"))
 		protected.GET("/accounts", ServeFormWithUserID("account_form.html"))
 		protected.GET("/categories", ServeFormWithUserID("category_form.html"))
+		protected.GET("/recordings", ServeFormWithUserID("recording_form.html"))
+		protected.POST("/recordings", createVoiceRecordingHandler(deps.Recordings))
 	}
 
 	api := r.Group("/api")

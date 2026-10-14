@@ -54,6 +54,7 @@ func main() {
 	userRepo := postgres.NewUserRepository(db)
 	accountRepo := postgres.NewAccountRepository(db)
 	categoryRepo := postgres.NewCategoryRepository(db)
+	recordingRepo := postgres.NewVoiceRecordingRepository(db)
 	userService := service.NewUserService(userRepo)
 	accountService := service.NewAccountService(userRepo, accountRepo, categoryRepo)
 	controller := http.NewController(userService, accountService)
@@ -62,6 +63,7 @@ func main() {
 		AuthToken:   authToken,
 		Controller:  controller,
 		UserService: userService,
+		Recordings:  recordingRepo,
 	}
 	router := http.NewRouter(routerDeps)
 
