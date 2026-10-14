@@ -23,11 +23,6 @@ import (
 
 func main() {
 	log.Printf("koin version: %s", version.Version)
-	authToken := os.Getenv("API_TOKEN")
-	if authToken == "" {
-		authToken = "dev-token" // solo per sviluppo
-	}
-
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://myuser:mypassword@localhost:5432/mydb?sslmode=disable"
@@ -51,19 +46,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	userRepo := postgres.NewUserRepository(db)
 	accountRepo := postgres.NewAccountRepository(db)
 	categoryRepo := postgres.NewCategoryRepository(db)
 	recordingRepo := postgres.NewVoiceRecordingRepository(db)
-	userService := service.NewUserService(userRepo)
-	accountService := service.NewAccountService(userRepo, accountRepo, categoryRepo)
-	controller := http.NewController(userService, accountService)
+	accountService := service.NewAccountService(accountRepo, categoryRepo)
+	controller := http.NewController(accountService)
 
 	routerDeps := http.RouterDeps{
-		AuthToken:   authToken,
-		Controller:  controller,
-		UserService: userService,
-		Recordings:  recordingRepo,
+		Controller: controller,
+		Recordings: recordingRepo,
 	}
 	router := http.NewRouter(routerDeps)
 

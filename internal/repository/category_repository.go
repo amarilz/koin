@@ -7,7 +7,7 @@ import (
 )
 
 type CategoryRepository interface {
-	GetCategory(ctx context.Context, user dbgen.User, categoryName string, categoryType dto.CategoryType) (dbgen.Category, error)
-	CreateCategory(ctx context.Context, user dbgen.User, categoryName string, categoryType dto.CategoryType) (dbgen.Category, error)
-	GetCategories(ctx context.Context, user dbgen.User) ([]dbgen.Category, error)
+	GetCategory(ctx context.Context, categoryName string, categoryType dto.CategoryType) (dbgen.Category, error)
+	CreateCategory(ctx context.Context, categoryName string, categoryType dto.CategoryType) (dbgen.Category, error)
+	GetCategories(ctx context.Context) ([]dbgen.Category, error)
 }

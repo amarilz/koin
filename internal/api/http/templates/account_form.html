@@ -21,7 +21,6 @@
                 <li><a href="/forms/accounts" class="active">Account</a></li>
                 <li><a href="/forms/categories">Categorie</a></li>
                 <li><a href="/forms/recordings">Registrazioni</a></li>
-                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
             </ul>
         </div>
     </header>
@@ -40,7 +39,6 @@
             <div class="error-message" id="errorMessage"></div>
 
             <form id="accountForm" method="POST" action="/api/v1/accounts">
-            <input type="hidden" id="userId" name="userId" value="{{ .userID }}">
 
             <div class="form-group">
                 <label for="name">Nome Account *</label>
@@ -103,21 +101,10 @@
     </div>
 
     <script>
-        // Estrae il userId dai cookie della sessione
-        function getUserId() {
-            return parseInt(document.getElementById('userId').value) || 0;
-        }
-
         // Carica la lista degli account all'avvio
         async function loadAccountsList() {
-            const userId = getUserId();
-            if (!userId) {
-                document.getElementById('accountsList').innerHTML = '<li class="item-list-empty">Caricamento...</li>';
-                return;
-            }
-
             try {
-                const response = await fetch(`/api/v1/accounts?userId=${userId}`);
+                const response = await fetch('/api/v1/accounts');
                 const data = await response.json();
 
                 const listContainer = document.getElementById('accountsList');
@@ -153,7 +140,6 @@
 
             try {
                 const formData = {
-                    userId: parseInt(document.getElementById('userId').value),
                     name: document.getElementById('name').value,
                     currency: document.getElementById('currency').value,
                     initialBalance: Math.round(parseFloat(document.getElementById('initialBalance').value) * 100)
@@ -172,7 +158,6 @@
                 if (response.ok) {
                     successMsg.textContent = `✓ Account creato con successo! ID: ${data.id}`;
                     successMsg.style.display = 'block';
-                    // Reset del form ma mantiene lo userId
                     document.getElementById('name').value = '';
                     document.getElementById('currency').value = '';
                     document.getElementById('initialBalance').value = '';

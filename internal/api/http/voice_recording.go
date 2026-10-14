@@ -18,17 +18,6 @@ const maxVoiceRecordingSize = 25 << 20
 
 func createVoiceRecordingHandler(recordings repository.VoiceRecordingRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userIDValue, exists := c.Get("userID")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "sessione non valida"})
-			return
-		}
-		userID, ok := userIDValue.(int64)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "sessione non valida"})
-			return
-		}
-
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxVoiceRecordingSize+(1<<20))
 		file, header, err := c.Request.FormFile("audio")
 		if err != nil {
@@ -69,9 +58,9 @@ func createVoiceRecordingHandler(recordings repository.VoiceRecordingRepository)
 			return
 		}
 
-		id, err := recordings.CreateVoiceRecording(c.Request.Context(), userID, audioData, mimeType, durationMS)
+		id, err := recordings.CreateVoiceRecording(c.Request.Context(), audioData, mimeType, durationMS)
 		if err != nil {
-			log.Printf("save voice recording for user %d: %v", userID, err)
+			log.Printf("save voice recording: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "impossibile salvare la registrazione"})
 			return
 		}

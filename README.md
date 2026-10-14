@@ -19,4 +19,4 @@ go mod download
 
 ## Make commands
 
-Esegui `make help` per vedere i comandi disponibili.
+Run `make help` to see the available commands.

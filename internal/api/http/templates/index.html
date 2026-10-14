@@ -225,7 +225,6 @@
                 <li><a href="/forms/accounts">Account</a></li>
                 <li><a href="/forms/categories">Categorie</a></li>
                 <li><a href="/forms/recordings">Registrazioni</a></li>
-                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
             </ul>
         </div>
     </header>
@@ -312,8 +311,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 
     <script>
-        const userID = {{ .userID }} || 0;
-
         function formatAmount(amountInCents) {
             const amount = (amountInCents / 100).toFixed(2);
             return `${amount} €`;
@@ -329,13 +326,8 @@
 
         async function loadAccountSummary() {
             const summaryEl = document.getElementById('accountSummary');
-            if (!userID) {
-                summaryEl.innerHTML = '<li class="empty-state">Utente non autenticato</li>';
-                return;
-            }
-
             try {
-                const response = await fetch(`/api/v1/accounts?userId=${userID}`);
+                const response = await fetch('/api/v1/accounts');
                 const data = await response.json();
                 if (!Array.isArray(data) || data.length === 0) {
                     summaryEl.innerHTML = '<li class="empty-state">Nessun account disponibile</li>';
@@ -509,13 +501,8 @@
 
         async function loadRecentTransactions() {
             const listEl = document.getElementById('transactionsList');
-            if (!userID) {
-                listEl.innerHTML = '<div class="empty-state">Utente non autenticato</div>';
-                return;
-            }
-
             try {
-                const response = await fetch(`/api/v1/transactions?userId=${userID}&limit=1000`);
+                const response = await fetch('/api/v1/transactions?limit=1000');
                 const data = await response.json();
                 if (!Array.isArray(data) || data.length === 0) {
                     listEl.innerHTML = '<div class="empty-state">Nessuna transazione trovata</div>';

@@ -23,7 +23,6 @@
                 <li><a href="/forms/accounts">Account</a></li>
                 <li><a href="/forms/categories">Categorie</a></li>
                 <li><a href="/forms/recordings">Registrazioni</a></li>
-                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
             </ul>
         </div>
     </header>
@@ -108,8 +107,6 @@
         </div>
 
         <script>
-            // Recupera l'userID dal contesto (passato dal template backend)
-            const userID = {{ .userID }} || 0;
             const categoriesByType = new Map();
 
             const accountOptions = document.getElementById('accountOptions');
@@ -133,14 +130,8 @@
             }
 
             async function loadAccountOptions() {
-                if (!userID) {
-                    populateDatalist(accountOptions, []);
-                    populateDatalist(transferAccountOptions, []);
-                    return;
-                }
-
                 try {
-                    const response = await fetch(`/api/v1/accounts?userId=${userID}`);
+                    const response = await fetch('/api/v1/accounts');
                     const data = await response.json();
                     if (Array.isArray(data)) {
                         const accountNames = data.map((account) => account.name);
@@ -154,13 +145,8 @@
             }
 
             async function loadCategoryOptions() {
-                if (!userID) {
-                    populateDatalist(categoryOptions, []);
-                    return;
-                }
-
                 try {
-                    const response = await fetch(`/api/v1/categories?userId=${userID}`);
+                    const response = await fetch('/api/v1/categories');
                     const data = await response.json();
                     if (Array.isArray(data)) {
                         categoriesByType.clear();
@@ -245,7 +231,6 @@
                         endpoint = '/api/v1/transfers';
                         const transferDescription = descriptionValue.trim() || 'Trasferimento tra account';
                         formData = {
-                            userId: userID,
                             accountFrom: document.getElementById('accountName').value,
                             accountTo: document.getElementById('transferAccountName').value,
                             amount: amountValue,
@@ -254,7 +239,6 @@
                         };
                     } else {
                         formData = {
-                            userId: userID,
                             accountName: document.getElementById('accountName').value,
                             categoryName: document.getElementById('categoryName').value,
                             categoryType: categoryType,
