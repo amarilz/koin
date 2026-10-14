@@ -71,11 +71,27 @@ func migrateDatabase(dsn string) error {
 		dsn,
 	)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	m.Log = migrationLogger{}
+	defer m.Close()
+
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatal(err)
+		return err
+	} else if errors.Is(err, migrate.ErrNoChange) {
+		log.Println("no migrations to apply")
+		return nil
 	}
 	log.Println("migrations applied")
-	return err
+	return nil
+}
+
+type migrationLogger struct{}
+
+func (migrationLogger) Printf(format string, v ...interface{}) {
+	log.Printf(format, v...)
+}
+
+func (migrationLogger) Verbose() bool {
+	return false
 }
