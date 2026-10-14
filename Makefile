@@ -17,7 +17,7 @@ DATABASE_URL ?=
 API_CONFIG=./internal/api/open-api-codegen.yaml
 API_SPEC=./internal/api/api.yaml
 
-.PHONY: all build clean test run generate generate-api generate-db migrate help
+.PHONY: all build clean test run generate generate-api generate-db migrate docker-build help
 
 # Task di default: genera il codice e compila senza richiedere un database attivo
 all: build
@@ -35,6 +35,10 @@ build: generate
 	@echo "Costruzione del binario (VERSION=$(VERSION))..."
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) -ldflags "-X koin/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+
+## docker-build: Costruisce l'immagine Docker con tag versione e latest
+docker-build:
+	docker build --build-arg VERSION=$(VERSION) -t $(BINARY_NAME):$(VERSION) -t $(BINARY_NAME):latest .
 
 ## generate: Esegue tutti i generatori di codice (API e SQL)
 generate: generate-api generate-db
