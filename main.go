@@ -45,6 +45,7 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("database connection established")
 
 	accountRepo := postgres.NewAccountRepository(db)
 	categoryRepo := postgres.NewCategoryRepository(db)
@@ -61,6 +62,7 @@ func main() {
 	}
 	transcriptionService := service.NewVoiceTranscriptionService(recordingRepo, transcriptionClient)
 	go transcriptionService.Run(context.Background())
+	log.Println("transcription service configured")
 
 	routerDeps := http.RouterDeps{
 		Controller: controller,

@@ -125,10 +125,12 @@ func (service *VoiceTranscriptionService) Run(ctx context.Context) {
 	ticker := time.NewTicker(service.interval)
 	defer ticker.Stop()
 
+	log.Printf("voice transcription scheduler started | interval=%s", service.interval)
 	for {
 		service.transcribePending(ctx)
 		select {
 		case <-ctx.Done():
+			log.Println("voice transcription scheduler stopped")
 			return
 		case <-ticker.C:
 		}
@@ -136,21 +138,29 @@ func (service *VoiceTranscriptionService) Run(ctx context.Context) {
 }
 
 func (service *VoiceTranscriptionService) transcribePending(ctx context.Context) {
+	cycleStarted := time.Now()
+	log.Println("voice transcription scheduler checking for pending recordings")
 	var afterID int64
+	processed := 0
 	for {
 		if err := ctx.Err(); err != nil {
+			log.Printf("voice transcription scheduler cycle interrupted | processed=%d | error=%v", processed, err)
 			return
 		}
 		recording, err := service.recordings.GetNextUntranscribedVoiceRecording(ctx, afterID)
 		if err != nil {
-			log.Printf("get pending voice recording: %v", err)
+			log.Printf("voice transcription scheduler failed to load pending recording | processed=%d | error=%v", processed, err)
 			return
 		}
 		if recording == nil {
+			if processed != 0 {
+				log.Printf("voice transcription scheduler cycle completed | processed=%d | duration=%s", processed, time.Since(cycleStarted).Round(time.Millisecond))
+			}
 			return
 		}
 		afterID = recording.ID
 
+		transcriptionStarted := time.Now()
 		transcription, err := service.client.Transcribe(ctx, recording.AudioData, recording.MimeType)
 		if err != nil {
 			log.Printf("transcribe voice recording %d: %v", recording.ID, err)
@@ -158,6 +168,14 @@ func (service *VoiceTranscriptionService) transcribePending(ctx context.Context)
 		}
 		if err := service.recordings.SaveVoiceRecordingTranscription(ctx, recording.ID, transcription); err != nil {
 			log.Printf("save transcription for voice recording %d: %v", recording.ID, err)
+			continue
 		}
+		processed++
+		log.Printf(
+			"voice recording transcribed | id=%d | audio_size=%d | duration=%s",
+			recording.ID,
+			len(recording.AudioData),
+			time.Since(transcriptionStarted).Round(time.Millisecond),
+		)
 	}
 }

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -11,7 +12,14 @@ func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		_ = time.Since(start)
+		log.Printf(
+			"HTTP request | method=%s | path=%s | status=%d | duration=%s | client=%s",
+			c.Request.Method,
+			c.Request.URL.Path,
+			c.Writer.Status(),
+			time.Since(start).Round(time.Millisecond),
+			c.ClientIP(),
+		)
 	}
 }
 
