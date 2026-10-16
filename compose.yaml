@@ -61,10 +61,26 @@ services:
     restart: unless-stopped
     depends_on:
       - koin-postgres
+      - whisper
     environment:
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@koin-postgres:5432/${DB_NAME}?sslmode=disable
+      - TRANSCRIPTION_SERVICE_URL=http://whisper:8000/transcribe
     ports:
       - "8080:8080"
+    networks:
+      - koin_network
+
+  whisper:
+    image: whisper-transcription-service:1.0.0
+    container_name: whisper-transcription-service
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      WHISPER_MODEL_PATH: /models/large-v3-turbo.pt
+      WHISPER_LANGUAGE: Italian
+    volumes:
+      - /Users/amarildo/.cache/whisper:/models:ro
+    restart: unless-stopped
     networks:
       - koin_network
 

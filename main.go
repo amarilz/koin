@@ -51,6 +51,16 @@ func main() {
 	recordingRepo := postgres.NewVoiceRecordingRepository(db)
 	accountService := service.NewAccountService(accountRepo, categoryRepo)
 	controller := http.NewController(accountService)
+	transcriptionURL := os.Getenv("TRANSCRIPTION_SERVICE_URL")
+	if transcriptionURL == "" {
+		transcriptionURL = "http://whisper:8000/transcribe"
+	}
+	transcriptionClient, err := service.NewVoiceTranscriptionClient(transcriptionURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	transcriptionService := service.NewVoiceTranscriptionService(recordingRepo, transcriptionClient)
+	go transcriptionService.Run(context.Background())
 
 	routerDeps := http.RouterDeps{
 		Controller: controller,
