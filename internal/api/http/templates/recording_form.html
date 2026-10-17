@@ -386,6 +386,7 @@
                 successMessage.style.display = 'block';
                 discardRecording();
                 recordingStatus.textContent = 'Registrazione trascritta e salvata. Puoi registrarne una nuova.';
+                await loadReviewableRecordings();
             } catch (error) {
                 errorMessage.textContent = error.message || 'Errore durante il salvataggio della registrazione.';
                 errorMessage.style.display = 'block';
@@ -521,6 +522,9 @@
                 try {
                     const response = await fetch(`/forms/recordings/${recording.id}/extract`, { method: 'POST' });
                     const result = await response.json();
+                    if (result.ollamaUnavailable) {
+                        window.alert('Ollama non è raggiungibile. Avvia Ollama in un terminale con:\n\nOLLAMA_HOST=0.0.0.0:11434 ollama serve');
+                    }
                     if (!response.ok) throw new Error(result.error || 'Estrazione non riuscita.');
                     accountField.input.value = result.accountName || '';
                     targetField.input.value = result.accountTo || '';

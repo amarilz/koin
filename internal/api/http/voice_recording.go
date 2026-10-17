@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"koin/internal/model/dto"
@@ -167,6 +168,13 @@ func (handler *voiceRecordingReviewHandler) extract(c *gin.Context) {
 	extraction, err := handler.extractor.Extract(c.Request.Context(), recording.Transcription, accountNames, categoryOptions)
 	if err != nil {
 		log.Printf("extract transaction from voice recording %d: %v", id, err)
+		if errors.Is(err, syscall.ECONNREFUSED) {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":             "Ollama non è raggiungibile. Avvialo con: OLLAMA_HOST=0.0.0.0:11434 ollama serve",
+				"ollamaUnavailable": true,
+			})
+			return
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": "impossibile estrarre i dati con Ollama"})
 		return
 	}

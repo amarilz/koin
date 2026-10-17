@@ -17,6 +17,14 @@ Download the Go dependencies:
 go mod download
 ```
 
+## Ollama
+
+Start Ollama in a separate terminal before using transaction extraction:
+
+```sh
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
 ## Make commands
 
 Run `make help` to see the available commands.
