@@ -17,10 +17,9 @@
             </a>
             <ul class="nav-links">
                 <li><a href="/forms">Home</a></li>
-                <li><a href="/forms/transactions">Transazioni</a></li>
+                <li><a href="/forms/recordings">Registrazioni</a></li>
                 <li><a href="/forms/accounts">Account</a></li>
                 <li><a href="/forms/categories" class="active">Categorie</a></li>
-                <li><a href="/logout" style="color: #d32f2f;">Logout</a></li>
             </ul>
         </div>
     </header>
@@ -95,18 +94,10 @@
     </div>
 
     <script>
-        // Recupera l'userID dal contesto (passato dal template backend)
-        const userID = {{ .userID }} || 0;
-
         // Carica la lista delle categorie all'avvio
         async function loadCategoriesList() {
-            if (!userID || userID === 0) {
-                document.getElementById('categoriesList').innerHTML = '<li class="item-list-empty">Utente non autenticato</li>';
-                return;
-            }
-
             try {
-                const response = await fetch(`/api/v1/categories?userId=${userID}`);
+                const response = await fetch('/api/v1/categories');
                 const data = await response.json();
 
                 const listContainer = document.getElementById('categoriesList');
@@ -142,7 +133,6 @@
 
             try {
                 const formData = {
-                    userID: userID,
                     name: document.getElementById('name').value,
                     categoryType: document.getElementById('categoryType').value,
                     description: document.getElementById('description').value || ''

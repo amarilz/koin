@@ -23,9 +23,8 @@ func NewAccountRepository(db *sql.DB) *AccountRepository {
 	}
 }
 
-func (repo *AccountRepository) CreateAccount(ctx context.Context, user dbgen.User, createAccountDto dto.CreateAccountDto) (dbgen.Account, error) {
+func (repo *AccountRepository) CreateAccount(ctx context.Context, createAccountDto dto.CreateAccountDto) (dbgen.Account, error) {
 	account, err := repo.queries.CreateAccount(ctx, dbgen.CreateAccountParams{
-		UserID:         user.ID,
 		Name:           createAccountDto.Name,
 		Currency:       createAccountDto.Currency,
 		InitialBalance: createAccountDto.InitialBalance,
@@ -36,21 +35,18 @@ func (repo *AccountRepository) CreateAccount(ctx context.Context, user dbgen.Use
 	return account, nil
 }
 
-func (repo *AccountRepository) GetAccount(ctx context.Context, user dbgen.User, accountName string) (dbgen.Account, error) {
-	account, err := repo.queries.GetAccount(ctx, dbgen.GetAccountParams{
-		UserID: user.ID,
-		Name:   accountName,
-	})
+func (repo *AccountRepository) GetAccount(ctx context.Context, accountName string) (dbgen.Account, error) {
+	account, err := repo.queries.GetAccount(ctx, accountName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return dbgen.Account{}, fmt.Errorf("%w: %s", apierr.ErrAccountNotFound, accountName)
 		}
-		return dbgen.Account{}, fmt.Errorf("get account by user and name %q-%q: %w", user, accountName, err)
+		return dbgen.Account{}, fmt.Errorf("get account by name %q: %w", accountName, err)
 	}
 	return account, nil
 }
 
-func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.User, account dbgen.Account, category dbgen.Category, addExpenseDto dto.AddTransactionDto) (int64, error) {
+func (repo *AccountRepository) AddTransaction(ctx context.Context, account dbgen.Account, category dbgen.Category, addExpenseDto dto.AddTransactionDto) (int64, error) {
 	description := sql.NullString{
 		String: func() string {
 			if addExpenseDto.Description == nil {
@@ -62,7 +58,6 @@ func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.Us
 	}
 
 	duplicate, err := repo.queries.IsDuplicateTransaction(ctx, dbgen.IsDuplicateTransactionParams{
-		UserID:      user.ID,
 		OccurredAt:  addExpenseDto.OccurredAt,
 		AccountID:   account.ID,
 		CategoryID:  sql.NullInt64{Int64: category.ID, Valid: true},
@@ -76,10 +71,7 @@ func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.Us
 		return 0, fmt.Errorf("%w: transazione già esistente", apierr.ErrConflict)
 	}
 
-	transactionId, err := repo.queries.AddTransaction(ctx, dbgen.AddTransactionParams{
-		UserID:     user.ID,
-		OccurredAt: addExpenseDto.OccurredAt,
-	})
+	transactionId, err := repo.queries.AddTransaction(ctx, addExpenseDto.OccurredAt)
 	if err != nil {
 		return 0, err
 	}
@@ -100,8 +92,8 @@ func (repo *AccountRepository) AddTransaction(ctx context.Context, user dbgen.Us
 	return transactionId, nil
 }
 
-func (repo *AccountRepository) GetAccounts(ctx context.Context, user dbgen.User) ([]dbgen.Account, error) {
-	accounts, err := repo.queries.GetAccountsByUser(ctx, user.ID)
+func (repo *AccountRepository) GetAccounts(ctx context.Context) ([]dbgen.Account, error) {
+	accounts, err := repo.queries.GetAccounts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get accounts by user: %w", err)
 	}
@@ -116,18 +108,15 @@ func (repo *AccountRepository) GetAccountBalance(ctx context.Context, accountID 
 	return balance, nil
 }
 
-func (repo *AccountRepository) GetRecentTransactions(ctx context.Context, userID int64, limit int32) ([]dbgen.GetRecentTransactionEntriesByUserRow, error) {
-	entries, err := repo.queries.GetRecentTransactionEntriesByUser(ctx, dbgen.GetRecentTransactionEntriesByUserParams{
-		UserID: userID,
-		Limit:  limit,
-	})
+func (repo *AccountRepository) GetRecentTransactions(ctx context.Context, limit int32) ([]dbgen.GetRecentTransactionEntriesRow, error) {
+	entries, err := repo.queries.GetRecentTransactionEntries(ctx, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get recent transactions: %w", err)
 	}
 	return entries, nil
 }
 
-func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, user dbgen.User, fromAccount dbgen.Account, toAccount dbgen.Account, transfer dto.TransferBetweenAccountsDto) (int64, error) {
+func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, fromAccount dbgen.Account, toAccount dbgen.Account, transfer dto.TransferBetweenAccountsDto) (int64, error) {
 	if fromAccount.ID == toAccount.ID {
 		return 0, fmt.Errorf("accounts must be different")
 	}
@@ -150,7 +139,6 @@ func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, user
 	}
 
 	duplicate, err := queries.IsDuplicateTransfer(ctx, dbgen.IsDuplicateTransferParams{
-		UserID:      user.ID,
 		OccurredAt:  transfer.OccurredAt,
 		AccountID:   fromAccount.ID,
 		AccountID_2: toAccount.ID,
@@ -177,10 +165,7 @@ func (repo *AccountRepository) TransferBetweenAccounts(ctx context.Context, user
 		return 0, fmt.Errorf("%w", apierr.ErrInsufficientBalance)
 	}
 
-	transactionID, err := queries.AddTransaction(ctx, dbgen.AddTransactionParams{
-		UserID:     user.ID,
-		OccurredAt: transfer.OccurredAt,
-	})
+	transactionID, err := queries.AddTransaction(ctx, transfer.OccurredAt)
 	if err != nil {
 		_ = tx.Rollback()
 		return 0, err

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrazioni vocali</title>
+    <link rel="stylesheet" href="/forms/common.css">
+    <style>
+        .recording-container {
+            max-width: 640px;
+        }
+
+        .main-content {
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .review-container {
+            max-width: 1040px;
+            margin-top: 0;
+            padding: 24px;
+        }
+
+        .review-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .review-heading h1 {
+            margin-bottom: 4px;
+            font-size: 24px;
+        }
+
+        .review-heading .subtitle {
+            margin: 0;
+        }
+
+        #reviewStatus {
+            color: #666;
+            margin: 0 0 12px;
+            font-size: 13px;
+        }
+
+        #extractPendingButton {
+            background: #b00020;
+            color: #fff;
+            flex: 0 0 auto;
+            width: auto;
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        #extractPendingButton:hover {
+            background: #8e001a;
+        }
+
+        #reviewList {
+            display: grid;
+            gap: 12px;
+        }
+
+        .review-card {
+            padding: 16px;
+            border: 1px solid #e2e5ec;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .review-card-pending {
+            border-left: 3px solid #b00020;
+            padding-left: 14px;
+        }
+
+        .review-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .review-card-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .review-card h2 {
+            margin: 0;
+            color: #333;
+            font-size: 17px;
+        }
+
+        .review-card .extraction-status {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .review-card .extraction-pending {
+            background: #fff0f1;
+            color: #a51b2b;
+        }
+
+        .review-card .extraction-complete {
+            background: #eaf6ed;
+            color: #26733a;
+        }
+
+        .review-card .btn-delete {
+            flex: 0 0 auto;
+            width: auto;
+            padding: 7px 10px;
+            font-size: 12px;
+        }
+
+        .recording-details {
+            margin: 0 0 12px;
+            border: 1px solid #eceef2;
+            border-radius: 7px;
+            background: #fafbfc;
+        }
+
+        .recording-details summary {
+            padding: 8px 10px;
+            color: #4d5563;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .recording-details-content {
+            padding: 0 10px 10px;
+        }
+
+        .transcription-text {
+            margin: 0;
+            color: #424956;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        .review-card audio {
+            width: 100%;
+            height: 38px;
+            margin-top: 8px;
+        }
+
+        .review-card .field-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0 12px;
+        }
+
+        .review-form-title {
+            margin: 0 0 10px;
+            color: #555d6a;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .review-card .form-group {
+            margin-bottom: 12px;
+        }
+
+        .review-card label {
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .review-card input[type="text"],
+        .review-card input[type="date"],
+        .review-card input[type="number"],
+        .review-card select,
+        .review-card textarea {
+            padding: 9px 10px;
+            font-size: 13px;
+        }
+
+        .review-card .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .review-form-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 2px;
+        }
+
+        .review-card .review-error {
+            margin: 0;
+            color: #b00020;
+            font-size: 13px;
+        }
+
+        .review-card [role="status"] {
+            margin: 0;
+            color: #616977;
+            font-size: 12px;
+        }
+
+        .review-card .btn-submit {
+            flex: 0 0 auto;
+            width: auto;
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+
+        .review-card .date-fallback input[type="date"] {
+            border: 2px solid #b00020;
+            box-shadow: 0 0 0 2px rgba(176, 0, 32, 0.12);
+        }
+
+        .review-card .date-fallback-hint {
+            display: block;
+            margin-top: 6px;
+            color: #b00020;
+        }
+
+        .recording-reminder {
+            margin: 24px 0 0;
+            padding: 18px;
+            border-radius: 8px;
+            background: #f7f7f7;
+            color: #333;
+            text-align: left;
+        }
+
+        .recording-reminder h2 {
+            margin-top: 0;
+            font-size: 20px;
+        }
+
+        .recording-reminder ul {
+            padding-left: 22px;
+        }
+
+        .recording-reminder li {
+            margin: 8px 0;
+        }
+
+        .recording-reminder .example {
+            padding: 12px;
+            border-left: 4px solid #4a90e2;
+            background: #fff;
+            font-style: italic;
+        }
+
+        .recording-status {
+            min-height: 24px;
+            margin: 20px 0;
+            color: #555;
+            text-align: center;
+        }
+
+        .recording-timer {
+            margin: 24px 0;
+            color: #333;
+            font-size: 40px;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+        }
+
+        .recording-player {
+            width: 100%;
+            margin: 12px 0;
+        }
+
+        .recording-container .button-group {
+            margin-top: 20px;
+        }
+
+        .btn-record {
+            background: #c62828;
+            color: white;
+        }
+
+        .btn-stop {
+            background: #555;
+            color: white;
+        }
+
+        .btn-delete {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+        }
+
+        @media (max-width: 760px) {
+            .review-card .field-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 600px) {
+            .recording-container .button-group {
+                flex-direction: column;
+            }
+
+            .review-container {
+                padding: 18px;
+            }
+
+            .review-heading {
+                flex-direction: column;
+            }
+
+            #extractPendingButton {
+                width: 100%;
+            }
+
+            .review-card .field-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .review-card .form-group.full-width {
+                grid-column: auto;
+            }
+
+            .review-form-footer {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .review-card .btn-submit {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <a href="/forms" class="logo">💰 Koin</a>
+            <ul class="nav-links">
+                <li><a href="/forms">Home</a></li>
+                <li><a href="/forms/recordings" class="active">Registrazioni</a></li>
+                <li><a href="/forms/accounts">Account</a></li>
+                <li><a href="/forms/categories">Categorie</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <section class="container recording-container">
+            <h1>Registrazione vocale</h1>
+            <p class="subtitle">Registra un audio, riascoltalo e conferma per salvarlo.</p>
+
+            <div class="info-box">La registrazione viene salvata solo dopo la conferma. Puoi eliminarla in qualsiasi momento prima di salvarla. Dimensione massima: 25 MB.</div>
+            <div class="success-message" id="successMessage" role="status"></div>
+            <div class="error-message" id="errorMessage" role="alert"></div>
+            <p class="recording-status" id="recordingStatus" aria-live="polite">Pronto per registrare.</p>
+            <div class="recording-timer" id="recordingTimer" aria-label="Durata">00:00</div>
+            <audio class="recording-player" id="recordingPlayer" controls hidden></audio>
+
+            <div class="button-group">
+                <button type="button" class="btn-record" id="startButton">Avvia registrazione</button>
+                <button type="button" class="btn-stop" id="stopButton" disabled>Ferma</button>
+            </div>
+            <div class="button-group" id="reviewActions" hidden>
+                <button type="button" class="btn-submit" id="confirmButton">Conferma e salva</button>
+                <button type="button" class="btn-delete" id="deleteButton">Elimina registrazione</button>
+            </div>
+
+            <aside class="recording-reminder" aria-labelledby="recordingReminderTitle">
+                <h2 id="recordingReminderTitle">Cosa dire nella registrazione</h2>
+                <p>Per aiutare l’estrazione, indica questi dati. Puoi riascoltare e correggere tutto prima di confermare.</p>
+                <ul>
+                    <li><strong>Tipo:</strong> spesa, entrata oppure trasferimento tra account.</li>
+                    <li><strong>Account:</strong> il nome esatto dell’account usato; per un trasferimento, specifica account di partenza e di destinazione.</li>
+                    <li><strong>Categoria:</strong> per spese ed entrate, indica la categoria.</li>
+                    <li><strong>Importo:</strong> la cifra e la valuta.</li>
+                    <li><strong>Data:</strong> il giorno in cui è avvenuta l’operazione.</li>
+                    <li><strong>Descrizione:</strong> una breve nota, se utile.</li>
+                </ul>
+                <p class="example">Esempio: “Spesa di 12 euro e 50 al supermercato, categoria alimentari, pagata con account Contanti, oggi. Descrizione: spesa settimanale.”</p>
+                <p class="example">Per un trasferimento: “Trasferimento di 100 euro oggi dall’account Conto corrente all’account Risparmi.”</p>
+            </aside>
+        </section>
+
+        <section class="container review-container">
+            <div class="review-heading">
+                <div>
+                    <h1>Trascrizioni da confermare</h1>
+                    <p class="subtitle">Verifica i dati, completa quelli mancanti e conferma.</p>
+                </div>
+                <button type="button" class="btn-submit" id="extractPendingButton" hidden>Estrai i dati mancanti con Ollama</button>
+            </div>
+            <p id="reviewStatus" role="status">Caricamento registrazioni...</p>
+            <div id="reviewList"></div>
+        </section>
+    </main>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const confirmButton = document.getElementById('confirmButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const reviewActions = document.getElementById('reviewActions');
+        const recordingPlayer = document.getElementById('recordingPlayer');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const recordingTimer = document.getElementById('recordingTimer');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const maxAudioBytes = 25 * 1024 * 1024;
+
+        let mediaRecorder;
+        let mediaStream;
+        let audioChunks = [];
+        let audioSize = 0;
+        let audioBlob;
+        let audioURL;
+        let recordingStartedAt = 0;
+        let durationMS = 0;
+        let timerInterval;
+
+        const reviewList = document.getElementById('reviewList');
+        const reviewStatus = document.getElementById('reviewStatus');
+        const extractPendingButton = document.getElementById('extractPendingButton');
+        let accounts = [];
+        let categories = [];
+
+        function formatDuration(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${seconds}`;
+        }
+
+        function stopTracks() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+        }
+
+        function discardRecording() {
+            if (audioURL) {
+                URL.revokeObjectURL(audioURL);
+                audioURL = null;
+            }
+            audioBlob = null;
+            audioChunks = [];
+            recordingPlayer.removeAttribute('src');
+            recordingPlayer.hidden = true;
+            reviewActions.hidden = true;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            recordingTimer.textContent = '00:00';
+            recordingStatus.textContent = 'Registrazione eliminata. Puoi registrarne una nuova.';
+        }
+
+        startButton.addEventListener('click', async () => {
+            successMessage.style.display = 'none';
+            errorMessage.style.display = 'none';
+            startButton.disabled = true;
+
+            try {
+                if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+                    throw new Error('Il browser non supporta la registrazione audio.');
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const preferredType = ['audio/webm;codecs=opus', 'audio/mp4']
+                    .find(type => MediaRecorder.isTypeSupported(type));
+                mediaRecorder = new MediaRecorder(mediaStream, preferredType ? { mimeType: preferredType } : undefined);
+                audioChunks = [];
+                audioSize = 0;
+                recordingStartedAt = Date.now();
+                durationMS = 0;
+
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        audioSize += event.data.size;
+                        if (audioSize > maxAudioBytes && mediaRecorder.state === 'recording') {
+                            durationMS = Date.now() - recordingStartedAt;
+                            mediaRecorder.stop();
+                        }
+                    }
+                });
+                mediaRecorder.addEventListener('stop', () => {
+                    clearInterval(timerInterval);
+                    stopTracks();
+                    audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                    audioChunks = [];
+                    if (audioBlob.size > maxAudioBytes) {
+                        discardRecording();
+                        errorMessage.textContent = 'La registrazione supera il limite di 25 MB. Prova con un audio più breve.';
+                        errorMessage.style.display = 'block';
+                        return;
+                    }
+                    if (audioURL) {
+                        URL.revokeObjectURL(audioURL);
+                    }
+                    audioURL = URL.createObjectURL(audioBlob);
+                    recordingPlayer.src = audioURL;
+                    recordingPlayer.hidden = false;
+                    reviewActions.hidden = false;
+                    startButton.disabled = true;
+                    recordingStatus.textContent = 'Ascolta la registrazione, poi conferma o eliminala.';
+                });
+                mediaRecorder.addEventListener('error', () => {
+                    clearInterval(timerInterval);
+                    stopTracks();
+                    stopButton.disabled = true;
+                    startButton.disabled = false;
+                    recordingStatus.textContent = 'Si è verificato un errore durante la registrazione.';
+                });
+
+                mediaRecorder.start(1000);
+                stopButton.disabled = false;
+                recordingStatus.textContent = 'Registrazione in corso...';
+                timerInterval = setInterval(() => {
+                    durationMS = Date.now() - recordingStartedAt;
+                    recordingTimer.textContent = formatDuration(durationMS);
+                }, 250);
+            } catch (error) {
+                stopTracks();
+                startButton.disabled = false;
+                errorMessage.textContent = error.message || 'Impossibile avviare la registrazione.';
+                errorMessage.style.display = 'block';
+                recordingStatus.textContent = 'Registrazione non avviata.';
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            if (mediaRecorder?.state === 'recording') {
+                durationMS = Date.now() - recordingStartedAt;
+                recordingTimer.textContent = formatDuration(durationMS);
+                stopButton.disabled = true;
+                mediaRecorder.stop();
+            }
+        });
+
+        deleteButton.addEventListener('click', () => {
+            if (mediaRecorder?.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            clearInterval(timerInterval);
+            stopTracks();
+            discardRecording();
+        });
+
+        confirmButton.addEventListener('click', async () => {
+            if (!audioBlob) {
+                return;
+            }
+
+            confirmButton.disabled = true;
+            deleteButton.disabled = true;
+            errorMessage.style.display = 'none';
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording');
+            formData.append('durationMs', String(durationMS));
+
+            try {
+                const response = await fetch('/forms/recordings', { method: 'POST', body: formData });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Impossibile salvare la registrazione.');
+                }
+
+                successMessage.textContent = result.extractionAvailable
+                    ? `Registrazione trascritta, analizzata e salvata (ID: ${result.id}).`
+                    : `Registrazione trascritta e salvata (ID: ${result.id}). L’estrazione LLM è in attesa; puoi avviarla con il pulsante nella lista.`;
+                successMessage.style.display = 'block';
+                discardRecording();
+                recordingStatus.textContent = 'Registrazione trascritta e salvata. Puoi registrarne una nuova.';
+                await loadReviewableRecordings();
+            } catch (error) {
+                errorMessage.textContent = error.message || 'Errore durante il salvataggio della registrazione.';
+                errorMessage.style.display = 'block';
+            } finally {
+                confirmButton.disabled = false;
+                deleteButton.disabled = false;
+            }
+        });
+
+        function createOption(value, label = value) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            return option;
+        }
+
+        async function loadReviewOptions() {
+            const [accountResponse, categoryResponse] = await Promise.all([
+                fetch('/api/v1/accounts'),
+                fetch('/api/v1/categories')
+            ]);
+            if (!accountResponse.ok || !categoryResponse.ok) {
+                throw new Error('Impossibile caricare account e categorie.');
+            }
+            accounts = await accountResponse.json();
+            categories = await categoryResponse.json();
+        }
+
+        function createField(labelText, name, type = 'text', options = {}) {
+            const group = document.createElement('div');
+            group.className = `form-group${options.fullWidth ? ' full-width' : ''}`;
+            const label = document.createElement('label');
+            label.textContent = labelText;
+            label.htmlFor = `${name}-${crypto.randomUUID()}`;
+            let input;
+            if (type === 'select') {
+                input = document.createElement('select');
+                input.appendChild(createOption('', '-- Seleziona --'));
+                (options.values || []).forEach(value => input.appendChild(createOption(value, options.labels?.[value] || value)));
+            } else if (type === 'textarea') {
+                input = document.createElement('textarea');
+            } else {
+                input = document.createElement('input');
+                input.type = type;
+            }
+            input.id = label.htmlFor;
+            input.name = name;
+            input.required = Boolean(options.required);
+            if (options.step) input.step = options.step;
+            if (options.min) input.min = options.min;
+            if (options.list) {
+                const datalist = document.createElement('datalist');
+                datalist.id = `${input.id}-options`;
+                options.list.forEach(value => datalist.appendChild(createOption(value)));
+                input.setAttribute('list', datalist.id);
+                group.append(label, input, datalist);
+            } else {
+                group.append(label, input);
+            }
+            return { group, input };
+        }
+
+        function renderReviewCard(recording) {
+            const card = document.createElement('article');
+            card.className = recording.extraction ? 'review-card' : 'review-card review-card-pending';
+            card.dataset.id = recording.id;
+
+            const cardHeader = document.createElement('div');
+            cardHeader.className = 'review-card-header';
+            const cardHeading = document.createElement('div');
+            cardHeading.className = 'review-card-heading';
+            const title = document.createElement('h2');
+            title.textContent = `Registrazione #${recording.id}`;
+            const extractionStatus = document.createElement('p');
+            extractionStatus.className = recording.extraction
+                ? 'extraction-status extraction-complete'
+                : 'extraction-status extraction-pending';
+            extractionStatus.textContent = recording.extraction
+                ? 'Estrazione LLM completata'
+                : 'Estrazione LLM in attesa';
+            cardHeading.append(title, extractionStatus);
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'btn-delete';
+            deleteButton.textContent = 'Elimina';
+            cardHeader.append(cardHeading, deleteButton);
+
+            const recordingDetails = document.createElement('details');
+            recordingDetails.className = 'recording-details';
+            const recordingSummary = document.createElement('summary');
+            recordingSummary.textContent = 'Mostra trascrizione e audio';
+            const recordingDetailsContent = document.createElement('div');
+            recordingDetailsContent.className = 'recording-details-content';
+            const transcript = document.createElement('p');
+            transcript.className = 'transcription-text';
+            transcript.textContent = recording.transcription;
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.preload = 'none';
+            audio.src = `/forms/recordings/${recording.id}/audio`;
+            recordingDetailsContent.append(transcript, audio);
+            recordingDetails.append(recordingSummary, recordingDetailsContent);
+
+            const form = document.createElement('form');
+            const formTitle = document.createElement('h3');
+            formTitle.className = 'review-form-title';
+            formTitle.textContent = 'Dati della transazione';
+            const fieldGrid = document.createElement('div');
+            fieldGrid.className = 'field-grid';
+
+            const accountNames = accounts.map(account => account.name);
+            const categoryOptions = categories.map(category => category.name);
+            const accountField = createField('Account *', 'accountName', 'text', { required: true, list: accountNames });
+            const typeField = createField('Tipo operazione *', 'categoryType', 'select', {
+                required: true,
+                values: ['EXPENSE', 'INCOME', 'TRANSFER'],
+                labels: { EXPENSE: 'Spesa', INCOME: 'Entrata', TRANSFER: 'Trasferimento' }
+            });
+            const categoryField = createField('Categoria *', 'categoryName', 'text', { required: true, list: categoryOptions });
+            const targetField = createField('Account di destinazione *', 'accountTo', 'text', { required: true, list: accountNames });
+            const amountField = createField('Importo (€) *', 'amount', 'number', { required: true, min: '0.01', step: '0.01' });
+            const dateField = createField('Data *', 'occurredAt', 'date', { required: true });
+            const dateFallbackHint = document.createElement('small');
+            dateFallbackHint.className = 'date-fallback-hint';
+            dateFallbackHint.textContent = 'Data non rilevata: impostata a oggi. Verificala prima di confermare.';
+            dateFallbackHint.hidden = true;
+            dateField.group.appendChild(dateFallbackHint);
+            const descriptionField = createField('Descrizione', 'description', 'textarea', { fullWidth: true });
+            fieldGrid.append(accountField.group, typeField.group, categoryField.group, targetField.group, amountField.group, dateField.group, descriptionField.group);
+            const missing = document.createElement('p');
+            missing.setAttribute('role', 'status');
+            const error = document.createElement('p');
+            error.className = 'review-error';
+            error.setAttribute('role', 'alert');
+            const footer = document.createElement('div');
+            footer.className = 'review-form-footer';
+            const feedback = document.createElement('div');
+            feedback.append(missing, error);
+            const submit = document.createElement('button');
+            submit.type = 'submit';
+            submit.className = 'btn-submit';
+            submit.textContent = 'Conferma e crea transazione';
+            footer.append(feedback, submit);
+            form.append(formTitle, fieldGrid, footer);
+            card.append(cardHeader, recordingDetails, form);
+            reviewList.appendChild(card);
+
+            function updateFields() {
+                const isTransfer = typeField.input.value === 'TRANSFER';
+                categoryField.group.hidden = isTransfer;
+                targetField.group.hidden = !isTransfer;
+                categoryField.input.required = !isTransfer;
+                targetField.input.required = isTransfer;
+            }
+            typeField.input.addEventListener('change', updateFields);
+            updateFields();
+
+            function clearDateFallbackIndicator() {
+                dateField.group.classList.remove('date-fallback');
+                dateFallbackHint.hidden = true;
+            }
+            dateField.input.addEventListener('input', clearDateFallbackIndicator);
+            dateField.input.addEventListener('change', clearDateFallbackIndicator);
+
+            const extraction = recording.extraction;
+            if (extraction) {
+                accountField.input.value = extraction.accountName || '';
+                targetField.input.value = extraction.accountTo || '';
+                typeField.input.value = extraction.categoryType || '';
+                categoryField.input.value = extraction.categoryName || '';
+                amountField.input.value = extraction.amount ?? '';
+                descriptionField.input.value = extraction.description || '';
+            }
+            if (extraction?.occurredAt) {
+                dateField.input.value = extraction.occurredAt;
+            } else {
+                const today = new Date();
+                dateField.input.value = [
+                    today.getFullYear(),
+                    String(today.getMonth() + 1).padStart(2, '0'),
+                    String(today.getDate()).padStart(2, '0')
+                ].join('-');
+                dateField.group.classList.add('date-fallback');
+                dateFallbackHint.textContent = extraction
+                    ? 'Data non rilevata: impostata a oggi. Verificala prima di confermare.'
+                    : 'Estrazione LLM in attesa: data impostata a oggi. Verificala prima di confermare.';
+                dateFallbackHint.hidden = false;
+            }
+            updateFields();
+            const missingFields = [];
+            if (!accountField.input.value) missingFields.push('account');
+            if (!typeField.input.value) missingFields.push('tipo operazione');
+            if (typeField.input.value === 'TRANSFER' && !targetField.input.value) missingFields.push('account di destinazione');
+            if (typeField.input.value !== 'TRANSFER' && !categoryField.input.value) missingFields.push('categoria');
+            if (!amountField.input.value) missingFields.push('importo');
+            missing.textContent = !extraction
+                ? 'Estrazione LLM in attesa. Usa il pulsante sopra per avviare l’analisi.'
+                : missingFields.length
+                    ? `Da completare o verificare: ${missingFields.join(', ')}.`
+                    : 'Verifica i dati estratti prima di confermare.';
+
+            deleteButton.addEventListener('click', async () => {
+                if (!window.confirm('Eliminare definitivamente questa trascrizione e la registrazione audio associata?')) {
+                    return;
+                }
+                deleteButton.disabled = true;
+                try {
+                    const response = await fetch(`/forms/recordings/${recording.id}`, { method: 'DELETE' });
+                    const result = response.status === 204 ? {} : await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Impossibile eliminare la trascrizione.');
+                    card.remove();
+                    reviewStatus.textContent = reviewList.children.length
+                        ? 'Trascrizione eliminata.'
+                        : 'Non ci sono trascrizioni da confermare.';
+                } catch (err) {
+                    error.textContent = err.message || 'Errore durante l’eliminazione.';
+                    deleteButton.disabled = false;
+                }
+            });
+
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                submit.disabled = true;
+                error.textContent = '';
+                const payload = Object.fromEntries(new FormData(form).entries());
+                payload.amount = payload.amount ? Number(payload.amount) : null;
+                try {
+                    const response = await fetch(`/forms/recordings/${recording.id}/confirm`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Impossibile creare la transazione.');
+                    card.remove();
+                    reviewStatus.textContent = `Transazione creata (ID: ${result.transactionId}).`;
+                    if (!reviewList.children.length) reviewStatus.textContent = 'Non ci sono trascrizioni da confermare.';
+                } catch (err) {
+                    error.textContent = err.message || 'Errore durante la conferma.';
+                    submit.disabled = false;
+                }
+            });
+        }
+
+        async function loadReviewableRecordings() {
+            try {
+                await loadReviewOptions();
+                const response = await fetch('/forms/recordings/reviewable');
+                if (!response.ok) throw new Error('Impossibile caricare le registrazioni da confermare.');
+                const recordings = await response.json();
+                reviewList.replaceChildren();
+                const pendingCount = recordings.filter(recording => !recording.extraction).length;
+                extractPendingButton.hidden = pendingCount === 0;
+                extractPendingButton.textContent = `Estrai i dati mancanti con Ollama (${pendingCount})`;
+                if (!recordings.length) {
+                    reviewStatus.textContent = 'Non ci sono trascrizioni da confermare.';
+                    return true;
+                }
+                reviewStatus.textContent = `${recordings.length} trascrizioni da confermare; ${pendingCount} in attesa di analisi LLM.`;
+                recordings.forEach(renderReviewCard);
+                return true;
+            } catch (error) {
+                reviewStatus.textContent = error.message || 'Errore nel caricamento delle trascrizioni.';
+                return false;
+            }
+        }
+
+        extractPendingButton.addEventListener('click', async () => {
+            extractPendingButton.disabled = true;
+            extractPendingButton.textContent = 'Analisi in coda...';
+            reviewStatus.textContent = 'Analisi delle registrazioni in attesa; verrà elaborata una registrazione alla volta.';
+            try {
+                const response = await fetch('/forms/recordings/extract-pending', { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Impossibile avviare l’analisi LLM.');
+                if (!await loadReviewableRecordings()) return;
+                if (result.failed > 0) {
+                    reviewStatus.textContent = `Analisi completate: ${result.succeeded} riuscite, ${result.failed} non riuscite. Puoi riprovare quelle ancora in attesa.`;
+                } else if (result.processed > 0) {
+                    reviewStatus.textContent = `Analisi completata per ${result.succeeded} registrazioni.`;
+                }
+            } catch (error) {
+                reviewStatus.textContent = error.message || 'Errore durante l’analisi LLM.';
+            } finally {
+                extractPendingButton.disabled = false;
+                const pendingCount = reviewList.querySelectorAll('.extraction-pending').length;
+                extractPendingButton.hidden = pendingCount === 0;
+                extractPendingButton.textContent = `Estrai i dati mancanti con Ollama (${pendingCount})`;
+            }
+        });
+
+        loadReviewableRecordings();
+    </script>
+</body>
+</html>

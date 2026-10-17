@@ -23,11 +23,6 @@ import (
 
 func main() {
 	log.Printf("koin version: %s", version.Version)
-	authToken := os.Getenv("API_TOKEN")
-	if authToken == "" {
-		authToken = "dev-token" // solo per sviluppo
-	}
-
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://myuser:mypassword@localhost:5432/mydb?sslmode=disable"
@@ -50,18 +45,42 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("database connection established")
 
-	userRepo := postgres.NewUserRepository(db)
 	accountRepo := postgres.NewAccountRepository(db)
 	categoryRepo := postgres.NewCategoryRepository(db)
-	userService := service.NewUserService(userRepo)
-	accountService := service.NewAccountService(userRepo, accountRepo, categoryRepo)
-	controller := http.NewController(userService, accountService)
+	recordingRepo := postgres.NewVoiceRecordingRepository(db)
+	accountService := service.NewAccountService(accountRepo, categoryRepo)
+	controller := http.NewController(accountService)
+	transcriptionURL := os.Getenv("TRANSCRIPTION_SERVICE_URL")
+	if transcriptionURL == "" {
+		transcriptionURL = "http://whisper:8000/transcribe"
+	}
+	transcriptionClient, err := service.NewVoiceTranscriptionClient(transcriptionURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("transcription service configured")
+	ollamaURL := os.Getenv("OLLAMA_BASE_URL")
+	if ollamaURL == "" {
+		ollamaURL = "http://host.docker.internal:11434"
+	}
+	ollamaModel := os.Getenv("OLLAMA_MODEL")
+	if ollamaModel == "" {
+		ollamaModel = "qwen3.5-9b"
+	}
+	extractionClient, err := service.NewTransactionExtractionClient(ollamaURL, ollamaModel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("transaction extraction configured | ollama_model=%s", ollamaModel)
 
 	routerDeps := http.RouterDeps{
-		AuthToken:   authToken,
 		Controller:  controller,
-		UserService: userService,
+		Recordings:  recordingRepo,
+		Transcriber: transcriptionClient,
+		Accounts:    accountService,
+		Extractor:   extractionClient,
 	}
 	router := http.NewRouter(routerDeps)
 
@@ -78,11 +97,27 @@ func migrateDatabase(dsn string) error {
 		dsn,
 	)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	m.Log = migrationLogger{}
+	defer m.Close()
+
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatal(err)
+		return err
+	} else if errors.Is(err, migrate.ErrNoChange) {
+		log.Println("no migrations to apply")
+		return nil
 	}
 	log.Println("migrations applied")
-	return err
+	return nil
+}
+
+type migrationLogger struct{}
+
+func (migrationLogger) Printf(format string, v ...interface{}) {
+	log.Printf(format, v...)
+}
+
+func (migrationLogger) Verbose() bool {
+	return false
 }
