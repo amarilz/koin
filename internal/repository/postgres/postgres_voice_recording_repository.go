@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"koin/internal/repository"
@@ -29,9 +30,32 @@ func (repo *VoiceRecordingRepository) CreateVoiceRecording(ctx context.Context, 
 	return id, nil
 }
 
+func (repo *VoiceRecordingRepository) SaveTransactionExtraction(ctx context.Context, id int64, extraction json.RawMessage) error {
+	var extractionValue any
+	if len(extraction) > 0 {
+		extractionValue = string(extraction)
+	}
+	result, err := repo.db.ExecContext(ctx, `
+		UPDATE voice_recordings
+		SET extraction = $2
+		WHERE id = $1 AND transcription IS NOT NULL
+	`, id, extractionValue)
+	if err != nil {
+		return fmt.Errorf("save extraction for voice recording %d: %w", id, err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check extraction update for voice recording %d: %w", id, err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: voice recording %d is missing or has no transcription", sql.ErrNoRows, id)
+	}
+	return nil
+}
+
 func (repo *VoiceRecordingRepository) ListReviewableVoiceRecordings(ctx context.Context) ([]repository.ReviewableVoiceRecording, error) {
 	rows, err := repo.db.QueryContext(ctx, `
-		SELECT id, transcription, mime_type, duration_ms, created_at
+		SELECT id, transcription, mime_type, duration_ms, created_at, extraction
 		FROM voice_recordings
 		WHERE transcription IS NOT NULL
 		ORDER BY created_at DESC, id DESC
@@ -44,13 +68,41 @@ func (repo *VoiceRecordingRepository) ListReviewableVoiceRecordings(ctx context.
 	recordings := make([]repository.ReviewableVoiceRecording, 0)
 	for rows.Next() {
 		var recording repository.ReviewableVoiceRecording
-		if err := rows.Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt); err != nil {
+		var extraction []byte
+		if err := rows.Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt, &extraction); err != nil {
 			return nil, fmt.Errorf("scan reviewable voice recording: %w", err)
 		}
+		recording.Extraction = json.RawMessage(extraction)
 		recordings = append(recordings, recording)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate reviewable voice recordings: %w", err)
+	}
+	return recordings, nil
+}
+
+func (repo *VoiceRecordingRepository) ListPendingTransactionExtractions(ctx context.Context) ([]repository.ReviewableVoiceRecording, error) {
+	rows, err := repo.db.QueryContext(ctx, `
+		SELECT id, transcription, mime_type, duration_ms, created_at
+		FROM voice_recordings
+		WHERE transcription IS NOT NULL AND extraction IS NULL
+		ORDER BY created_at, id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list voice recordings pending extraction: %w", err)
+	}
+	defer rows.Close()
+
+	recordings := make([]repository.ReviewableVoiceRecording, 0)
+	for rows.Next() {
+		var recording repository.ReviewableVoiceRecording
+		if err := rows.Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan voice recording pending extraction: %w", err)
+		}
+		recordings = append(recordings, recording)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate voice recordings pending extraction: %w", err)
 	}
 	return recordings, nil
 }
@@ -74,14 +126,16 @@ func (repo *VoiceRecordingRepository) GetVoiceRecordingAudio(ctx context.Context
 
 func (repo *VoiceRecordingRepository) GetReviewableVoiceRecording(ctx context.Context, id int64) (repository.ReviewableVoiceRecording, error) {
 	var recording repository.ReviewableVoiceRecording
+	var extraction []byte
 	err := repo.db.QueryRowContext(ctx, `
-		SELECT id, transcription, mime_type, duration_ms, created_at
+		SELECT id, transcription, mime_type, duration_ms, created_at, extraction
 		FROM voice_recordings
 		WHERE id = $1 AND transcription IS NOT NULL
-	`, id).Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt)
+	`, id).Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt, &extraction)
 	if err != nil {
 		return repository.ReviewableVoiceRecording{}, fmt.Errorf("get reviewable voice recording %d: %w", id, err)
 	}
+	recording.Extraction = json.RawMessage(extraction)
 	return recording, nil
 }
 

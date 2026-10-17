@@ -27,6 +27,25 @@
             margin-bottom: 12px;
         }
 
+        #extractPendingButton {
+            margin: 0 0 16px;
+            background: #b00020;
+            color: #fff;
+        }
+
+        .review-card .extraction-status {
+            margin: 0 0 12px;
+            font-weight: 600;
+        }
+
+        .review-card .extraction-pending {
+            color: #b00020;
+        }
+
+        .review-card .extraction-complete {
+            color: #2e7d32;
+        }
+
         #reviewList {
             display: grid;
             gap: 16px;
@@ -219,6 +238,7 @@
             <h1>Trascrizioni da confermare</h1>
             <p class="subtitle">Controlla i dati estratti, correggi i campi mancanti e conferma per creare la transazione.</p>
             <p id="reviewStatus" role="status">Caricamento registrazioni...</p>
+            <button type="button" class="btn-submit" id="extractPendingButton" hidden>Estrai i dati mancanti con Ollama</button>
             <div id="reviewList"></div>
         </section>
     </main>
@@ -248,6 +268,7 @@
 
         const reviewList = document.getElementById('reviewList');
         const reviewStatus = document.getElementById('reviewStatus');
+        const extractPendingButton = document.getElementById('extractPendingButton');
         let accounts = [];
         let categories = [];
 
@@ -392,7 +413,9 @@
                     throw new Error(result.error || 'Impossibile salvare la registrazione.');
                 }
 
-                successMessage.textContent = `Registrazione trascritta e salvata con successo (ID: ${result.id}).`;
+                successMessage.textContent = result.extractionAvailable
+                    ? `Registrazione trascritta, analizzata e salvata (ID: ${result.id}).`
+                    : `Registrazione trascritta e salvata (ID: ${result.id}). L’estrazione LLM è in attesa; puoi avviarla con il pulsante nella lista.`;
                 successMessage.style.display = 'block';
                 discardRecording();
                 recordingStatus.textContent = 'Registrazione trascritta e salvata. Puoi registrarne una nuova.';
@@ -466,6 +489,13 @@
 
             const title = document.createElement('h2');
             title.textContent = `Registrazione #${recording.id}`;
+            const extractionStatus = document.createElement('p');
+            extractionStatus.className = recording.extraction
+                ? 'extraction-status extraction-complete'
+                : 'extraction-status extraction-pending';
+            extractionStatus.textContent = recording.extraction
+                ? 'Estrazione LLM completata'
+                : 'Estrazione LLM in attesa';
             const transcriptLabel = document.createElement('strong');
             transcriptLabel.textContent = 'Trascrizione';
             const transcript = document.createElement('p');
@@ -475,16 +505,11 @@
             audio.controls = true;
             audio.preload = 'none';
             audio.src = `/forms/recordings/${recording.id}/audio`;
-            const extractButton = document.createElement('button');
-            extractButton.type = 'button';
-            extractButton.className = 'btn-submit';
-            extractButton.textContent = 'Estrai i dati con Ollama';
             const deleteButton = document.createElement('button');
             deleteButton.type = 'button';
             deleteButton.className = 'btn-delete';
             deleteButton.textContent = 'Elimina trascrizione';
             const form = document.createElement('form');
-            form.hidden = true;
             const fieldGrid = document.createElement('div');
             fieldGrid.className = 'field-grid';
 
@@ -517,7 +542,7 @@
             submit.className = 'btn-submit';
             submit.textContent = 'Conferma e crea transazione';
             form.append(fieldGrid, missing, error, submit);
-            card.append(title, transcriptLabel, transcript, audio, extractButton, deleteButton, form);
+            card.append(title, extractionStatus, transcriptLabel, transcript, audio, deleteButton, form);
             reviewList.appendChild(card);
 
             function updateFields() {
@@ -537,56 +562,42 @@
             dateField.input.addEventListener('input', clearDateFallbackIndicator);
             dateField.input.addEventListener('change', clearDateFallbackIndicator);
 
-            extractButton.addEventListener('click', async () => {
-                extractButton.disabled = true;
-                extractButton.textContent = 'Estrazione in corso...';
-                error.textContent = '';
-                try {
-                    const response = await fetch(`/forms/recordings/${recording.id}/extract`, { method: 'POST' });
-                    const result = await response.json();
-                    if (result.ollamaUnavailable) {
-                        window.alert('Ollama non è raggiungibile. Avvia Ollama in un terminale con:\n\nOLLAMA_HOST=0.0.0.0:11434 ollama serve');
-                    }
-                    if (!response.ok) throw new Error(result.error || 'Estrazione non riuscita.');
-                    accountField.input.value = result.accountName || '';
-                    targetField.input.value = result.accountTo || '';
-                    typeField.input.value = result.categoryType || '';
-                    categoryField.input.value = result.categoryName || '';
-                    amountField.input.value = result.amount ?? '';
-                    const dateWasNotExtracted = !result.occurredAt;
-                    if (dateWasNotExtracted) {
-                        const today = new Date();
-                        dateField.input.value = [
-                            today.getFullYear(),
-                            String(today.getMonth() + 1).padStart(2, '0'),
-                            String(today.getDate()).padStart(2, '0')
-                        ].join('-');
-                        dateField.group.classList.add('date-fallback');
-                        dateFallbackHint.hidden = false;
-                    } else {
-                        dateField.input.value = result.occurredAt;
-                        clearDateFallbackIndicator();
-                    }
-                    descriptionField.input.value = result.description || '';
-                    updateFields();
-                    const missingFields = [];
-                    if (!accountField.input.value) missingFields.push('account');
-                    if (!typeField.input.value) missingFields.push('tipo operazione');
-                    if (typeField.input.value === 'TRANSFER' && !targetField.input.value) missingFields.push('account di destinazione');
-                    if (typeField.input.value !== 'TRANSFER' && !categoryField.input.value) missingFields.push('categoria');
-                    if (!amountField.input.value) missingFields.push('importo');
-                    if (!dateField.input.value) missingFields.push('data');
-                    missing.textContent = missingFields.length
-                        ? `Da completare o verificare: ${missingFields.join(', ')}.`
-                        : 'Verifica i dati estratti prima di confermare.';
-                    form.hidden = false;
-                } catch (err) {
-                    error.textContent = err.message || 'Errore durante l’estrazione.';
-                } finally {
-                    extractButton.disabled = false;
-                    extractButton.textContent = 'Riprova estrazione con Ollama';
-                }
-            });
+            const extraction = recording.extraction;
+            if (extraction) {
+                accountField.input.value = extraction.accountName || '';
+                targetField.input.value = extraction.accountTo || '';
+                typeField.input.value = extraction.categoryType || '';
+                categoryField.input.value = extraction.categoryName || '';
+                amountField.input.value = extraction.amount ?? '';
+                descriptionField.input.value = extraction.description || '';
+            }
+            if (extraction?.occurredAt) {
+                dateField.input.value = extraction.occurredAt;
+            } else {
+                const today = new Date();
+                dateField.input.value = [
+                    today.getFullYear(),
+                    String(today.getMonth() + 1).padStart(2, '0'),
+                    String(today.getDate()).padStart(2, '0')
+                ].join('-');
+                dateField.group.classList.add('date-fallback');
+                dateFallbackHint.textContent = extraction
+                    ? 'Data non rilevata: impostata a oggi. Verificala prima di confermare.'
+                    : 'Estrazione LLM in attesa: data impostata a oggi. Verificala prima di confermare.';
+                dateFallbackHint.hidden = false;
+            }
+            updateFields();
+            const missingFields = [];
+            if (!accountField.input.value) missingFields.push('account');
+            if (!typeField.input.value) missingFields.push('tipo operazione');
+            if (typeField.input.value === 'TRANSFER' && !targetField.input.value) missingFields.push('account di destinazione');
+            if (typeField.input.value !== 'TRANSFER' && !categoryField.input.value) missingFields.push('categoria');
+            if (!amountField.input.value) missingFields.push('importo');
+            missing.textContent = !extraction
+                ? 'Estrazione LLM in attesa. Usa il pulsante sopra per avviare l’analisi.'
+                : missingFields.length
+                    ? `Da completare o verificare: ${missingFields.join(', ')}.`
+                    : 'Verifica i dati estratti prima di confermare.';
 
             deleteButton.addEventListener('click', async () => {
                 if (!window.confirm('Eliminare definitivamente questa trascrizione e la registrazione audio associata?')) {
@@ -638,16 +649,45 @@
                 if (!response.ok) throw new Error('Impossibile caricare le registrazioni da confermare.');
                 const recordings = await response.json();
                 reviewList.replaceChildren();
+                const pendingCount = recordings.filter(recording => !recording.extraction).length;
+                extractPendingButton.hidden = pendingCount === 0;
+                extractPendingButton.textContent = `Estrai i dati mancanti con Ollama (${pendingCount})`;
                 if (!recordings.length) {
                     reviewStatus.textContent = 'Non ci sono trascrizioni da confermare.';
-                    return;
+                    return true;
                 }
-                reviewStatus.textContent = `${recordings.length} trascrizioni da confermare.`;
+                reviewStatus.textContent = `${recordings.length} trascrizioni da confermare; ${pendingCount} in attesa di analisi LLM.`;
                 recordings.forEach(renderReviewCard);
+                return true;
             } catch (error) {
                 reviewStatus.textContent = error.message || 'Errore nel caricamento delle trascrizioni.';
+                return false;
             }
         }
+
+        extractPendingButton.addEventListener('click', async () => {
+            extractPendingButton.disabled = true;
+            extractPendingButton.textContent = 'Analisi in coda...';
+            reviewStatus.textContent = 'Analisi delle registrazioni in attesa; verrà elaborata una registrazione alla volta.';
+            try {
+                const response = await fetch('/forms/recordings/extract-pending', { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Impossibile avviare l’analisi LLM.');
+                if (!await loadReviewableRecordings()) return;
+                if (result.failed > 0) {
+                    reviewStatus.textContent = `Analisi completate: ${result.succeeded} riuscite, ${result.failed} non riuscite. Puoi riprovare quelle ancora in attesa.`;
+                } else if (result.processed > 0) {
+                    reviewStatus.textContent = `Analisi completata per ${result.succeeded} registrazioni.`;
+                }
+            } catch (error) {
+                reviewStatus.textContent = error.message || 'Errore durante l’analisi LLM.';
+            } finally {
+                extractPendingButton.disabled = false;
+                const pendingCount = reviewList.querySelectorAll('.extraction-pending').length;
+                extractPendingButton.hidden = pendingCount === 0;
+                extractPendingButton.textContent = `Estrai i dati mancanti con Ollama (${pendingCount})`;
+            }
+        });
 
         loadReviewableRecordings();
     </script>

@@ -10,9 +10,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	dbgen "koin/internal/db/generated"
+	"koin/internal/model/dto"
 	"koin/internal/repository"
 	"koin/internal/service"
 
@@ -24,6 +29,8 @@ type recordingRepositoryStub struct {
 	mimeType      string
 	durationMS    int64
 	transcription string
+	extraction    json.RawMessage
+	pending       []repository.ReviewableVoiceRecording
 	deletedID     int64
 }
 
@@ -32,11 +39,34 @@ func (repo *recordingRepositoryStub) CreateVoiceRecording(_ context.Context, aud
 	repo.mimeType = mimeType
 	repo.durationMS = durationMS
 	repo.transcription = transcription
+	repo.pending = append(repo.pending, repository.ReviewableVoiceRecording{
+		ID: int64(len(repo.pending) + 123), Transcription: transcription, MimeType: mimeType, DurationMS: durationMS,
+	})
 	return 123, nil
 }
 
+func (repo *recordingRepositoryStub) SaveTransactionExtraction(_ context.Context, id int64, extraction json.RawMessage) error {
+	repo.extraction = extraction
+	for i := range repo.pending {
+		if repo.pending[i].ID == id {
+			repo.pending[i].Extraction = extraction
+		}
+	}
+	return nil
+}
+
 func (repo *recordingRepositoryStub) ListReviewableVoiceRecordings(context.Context) ([]repository.ReviewableVoiceRecording, error) {
-	return nil, nil
+	return repo.pending, nil
+}
+
+func (repo *recordingRepositoryStub) ListPendingTransactionExtractions(context.Context) ([]repository.ReviewableVoiceRecording, error) {
+	pending := make([]repository.ReviewableVoiceRecording, 0)
+	for _, recording := range repo.pending {
+		if len(recording.Extraction) == 0 {
+			pending = append(pending, recording)
+		}
+	}
+	return pending, nil
 }
 
 func (repo *recordingRepositoryStub) GetReviewableVoiceRecording(_ context.Context, id int64) (repository.ReviewableVoiceRecording, error) {
@@ -50,6 +80,48 @@ func (repo *recordingRepositoryStub) GetVoiceRecordingAudio(context.Context, int
 func (repo *recordingRepositoryStub) DeletePendingVoiceRecording(_ context.Context, id int64) error {
 	repo.deletedID = id
 	return nil
+}
+
+type extractionOptionsRepositoryStub struct{}
+
+func (extractionOptionsRepositoryStub) GetAccount(context.Context, string) (dbgen.Account, error) {
+	return dbgen.Account{}, nil
+}
+
+func (extractionOptionsRepositoryStub) CreateAccount(context.Context, dto.CreateAccountDto) (dbgen.Account, error) {
+	return dbgen.Account{}, nil
+}
+
+func (extractionOptionsRepositoryStub) AddTransaction(context.Context, dbgen.Account, dbgen.Category, dto.AddTransactionDto) (int64, error) {
+	return 0, nil
+}
+
+func (extractionOptionsRepositoryStub) GetAccounts(context.Context) ([]dbgen.Account, error) {
+	return []dbgen.Account{{Name: "Contanti"}}, nil
+}
+
+func (extractionOptionsRepositoryStub) GetAccountBalance(context.Context, int64) (int64, error) {
+	return 0, nil
+}
+
+func (extractionOptionsRepositoryStub) GetRecentTransactions(context.Context, int32) ([]dbgen.GetRecentTransactionEntriesRow, error) {
+	return nil, nil
+}
+
+func (extractionOptionsRepositoryStub) TransferBetweenAccounts(context.Context, dbgen.Account, dbgen.Account, dto.TransferBetweenAccountsDto) (int64, error) {
+	return 0, nil
+}
+
+func (extractionOptionsRepositoryStub) GetCategory(context.Context, string, dto.CategoryType) (dbgen.Category, error) {
+	return dbgen.Category{}, nil
+}
+
+func (extractionOptionsRepositoryStub) CreateCategory(_ context.Context, name string, categoryType dto.CategoryType) (dbgen.Category, error) {
+	return dbgen.Category{Name: name, Type: string(categoryType)}, nil
+}
+
+func (extractionOptionsRepositoryStub) GetCategories(context.Context) ([]dbgen.Category, error) {
+	return []dbgen.Category{{Name: "Bar", Type: "EXPENSE"}}, nil
 }
 
 func TestCreateVoiceRecordingHandler(t *testing.T) {
@@ -80,10 +152,38 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 		_, _ = io.WriteString(w, `{"text":"trascrizione immediata"}`)
 	}))
 	defer transcriptionServer.Close()
+	extractionUnavailable := false
+	extractionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if extractionUnavailable {
+			http.Error(w, "Ollama unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		var request struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode extraction request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if len(request.Messages) != 2 || !strings.Contains(request.Messages[1].Content, "trascrizione immediata") {
+			t.Errorf("expected transcript in extraction request, got %#v", request.Messages)
+		}
+		_, _ = io.WriteString(w, `{"done":true,"done_reason":"stop","message":{"role":"assistant","content":"{\"accountName\":\"Contanti\",\"accountTo\":null,\"categoryType\":\"EXPENSE\",\"categoryName\":\"Bar\",\"amount\":5,\"occurredAt\":null,\"description\":\"Caffè\"}"}}`)
+	}))
+	defer extractionServer.Close()
 	transcriber, err := service.NewVoiceTranscriptionClient(transcriptionServer.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
+	extractor, err := service.NewTransactionExtractionClient(extractionServer.URL, "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	optionsRepo := extractionOptionsRepositoryStub{}
+	accounts := service.NewAccountService(optionsRepo, optionsRepo)
 	repo := &recordingRepositoryStub{}
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
@@ -103,14 +203,16 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
+	requestBody := append([]byte(nil), body.Bytes()...)
+	contentType := writer.FormDataContentType()
 
 	request := httptest.NewRequest(http.MethodPost, "/forms/recordings", body)
-	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Content-Type", contentType)
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	context.Request = request
 
-	createVoiceRecordingHandler(repo, transcriber)(context)
+	createVoiceRecordingHandler(repo, transcriber, accounts, extractor, make(chan struct{}, 1))(context)
 
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, recorder.Code, recorder.Body.String())
@@ -127,13 +229,163 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 	if repo.transcription != "trascrizione immediata" {
 		t.Errorf("expected transcription to be saved immediately, got %q", repo.transcription)
 	}
+	if got, want := string(repo.extraction), `{"accountName":"Contanti","accountTo":null,"categoryType":"EXPENSE","categoryName":"Bar","amount":5,"occurredAt":null,"description":"Caffè"}`; got != want {
+		t.Errorf("expected immediate extraction to be saved, got %q", got)
+	}
 
-	var response map[string]int64
+	var response struct {
+		ID                  int64 `json:"id"`
+		ExtractionAvailable bool  `json:"extractionAvailable"`
+	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if response["id"] != 123 {
-		t.Errorf("expected recording ID 123, got %d", response["id"])
+	if response.ID != 123 {
+		t.Errorf("expected recording ID 123, got %d", response.ID)
+	}
+	if !response.ExtractionAvailable {
+		t.Error("expected immediate extraction to be reported as available")
+	}
+
+	extractionUnavailable = true
+	pendingRepo := &recordingRepositoryStub{}
+	pendingRequest := httptest.NewRequest(http.MethodPost, "/forms/recordings", bytes.NewReader(requestBody))
+	pendingRequest.Header.Set("Content-Type", contentType)
+	pendingRecorder := httptest.NewRecorder()
+	pendingContext, _ := gin.CreateTestContext(pendingRecorder)
+	pendingContext.Request = pendingRequest
+
+	createVoiceRecordingHandler(pendingRepo, transcriber, accounts, extractor, make(chan struct{}, 1))(pendingContext)
+
+	if pendingRecorder.Code != http.StatusCreated {
+		t.Fatalf("expected unavailable Ollama to still save the transcription with status %d, got %d: %s", http.StatusCreated, pendingRecorder.Code, pendingRecorder.Body.String())
+	}
+	if pendingRepo.transcription != "trascrizione immediata" || len(pendingRepo.extraction) != 0 {
+		t.Errorf("expected transcription to remain pending after Ollama failure, got transcription=%q extraction=%q", pendingRepo.transcription, pendingRepo.extraction)
+	}
+	var pendingResponse struct {
+		ExtractionAvailable bool `json:"extractionAvailable"`
+	}
+	if err := json.Unmarshal(pendingRecorder.Body.Bytes(), &pendingResponse); err != nil {
+		t.Fatal(err)
+	}
+	if pendingResponse.ExtractionAvailable {
+		t.Error("expected failed immediate extraction to be reported as pending")
+	}
+}
+
+func TestExtractPendingVoiceRecordingsSerializesOllamaRequests(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var activeRequests atomic.Int32
+	var maxConcurrentRequests atomic.Int32
+	extractionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		active := activeRequests.Add(1)
+		defer activeRequests.Add(-1)
+		for maximum := maxConcurrentRequests.Load(); active > maximum; maximum = maxConcurrentRequests.Load() {
+			if maxConcurrentRequests.CompareAndSwap(maximum, active) {
+				break
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"done":true,"done_reason":"stop","message":{"role":"assistant","content":"{\"accountName\":\"Contanti\",\"accountTo\":null,\"categoryType\":\"EXPENSE\",\"categoryName\":\"Bar\",\"amount\":5,\"occurredAt\":\"2026-10-17\",\"description\":\"Caffè\"}"}}`)
+	}))
+	defer extractionServer.Close()
+	extractor, err := service.NewTransactionExtractionClient(extractionServer.URL, "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	optionsRepo := extractionOptionsRepositoryStub{}
+	accounts := service.NewAccountService(optionsRepo, optionsRepo)
+	repo := &recordingRepositoryStub{
+		pending: []repository.ReviewableVoiceRecording{
+			{ID: 1, Transcription: "Prima trascrizione"},
+			{ID: 2, Transcription: "Seconda trascrizione"},
+		},
+	}
+	handler := newVoiceRecordingReviewHandler(repo, accounts, extractor, make(chan struct{}, 1))
+	router := gin.New()
+	router.POST("/extract-pending", handler.extractPending)
+
+	responses := make([]*httptest.ResponseRecorder, 2)
+	var requests sync.WaitGroup
+	for i := range responses {
+		responses[i] = httptest.NewRecorder()
+		requests.Add(1)
+		go func(response *httptest.ResponseRecorder) {
+			defer requests.Done()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/extract-pending", nil))
+		}(responses[i])
+	}
+	requests.Wait()
+
+	if got := maxConcurrentRequests.Load(); got != 1 {
+		t.Errorf("expected exactly one concurrent Ollama request, got %d", got)
+	}
+	if len(repo.extraction) == 0 {
+		t.Error("expected extracted JSON to be saved")
+	}
+	for _, response := range responses {
+		if response.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+		}
+	}
+	var firstResult struct {
+		Processed int `json:"processed"`
+		Succeeded int `json:"succeeded"`
+	}
+	var secondResult struct {
+		Processed int `json:"processed"`
+		Succeeded int `json:"succeeded"`
+	}
+	if err := json.Unmarshal(responses[0].Body.Bytes(), &firstResult); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(responses[1].Body.Bytes(), &secondResult); err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.Succeeded+secondResult.Succeeded != 2 {
+		t.Errorf("expected two successful extractions across queued requests, got %+v and %+v", firstResult, secondResult)
+	}
+	if firstResult.Processed+secondResult.Processed != 2 {
+		t.Errorf("expected two recordings to be processed exactly once, got %+v and %+v", firstResult, secondResult)
+	}
+}
+
+func TestExtractPendingKeepsRecordingPendingWhenOllamaIsUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	extractor, err := service.NewTransactionExtractionClient(server.URL, "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Close()
+
+	optionsRepo := extractionOptionsRepositoryStub{}
+	accounts := service.NewAccountService(optionsRepo, optionsRepo)
+	repo := &recordingRepositoryStub{
+		pending: []repository.ReviewableVoiceRecording{{ID: 7, Transcription: "Spesa al bar"}},
+	}
+	handler := newVoiceRecordingReviewHandler(repo, accounts, extractor, make(chan struct{}, 1))
+	response := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(response)
+	context.Request = httptest.NewRequest(http.MethodPost, "/extract-pending", nil)
+
+	handler.extractPending(context)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var result struct {
+		Failed int `json:"failed"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Failed != 1 {
+		t.Errorf("expected one failed extraction, got %d", result.Failed)
+	}
+	if len(repo.pending[0].Extraction) != 0 {
+		t.Error("expected failed extraction to remain pending for retry")
 	}
 }
 
@@ -145,7 +397,7 @@ func TestDeletePendingVoiceRecordingHandler(t *testing.T) {
 	context.Request = httptest.NewRequest(http.MethodDelete, "/forms/recordings/42", nil)
 	context.Params = gin.Params{{Key: "id", Value: "42"}}
 
-	newVoiceRecordingReviewHandler(repo, nil, nil).delete(context)
+	newVoiceRecordingReviewHandler(repo, nil, nil, make(chan struct{}, 1)).delete(context)
 
 	if context.Writer.Status() != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, context.Writer.Status(), recorder.Body.String())
@@ -205,6 +457,12 @@ func TestPagesArePublicAndAuthenticationRoutesAreRemoved(t *testing.T) {
 	}
 
 	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/forms/recordings/extract-pending", nil))
+	if response.Code != http.StatusOK {
+		t.Errorf("POST /forms/recordings/extract-pending: expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/expenses", nil))
 	if response.Code != http.StatusNotFound {
 		t.Errorf("POST /api/v1/expenses: expected status %d, got %d", http.StatusNotFound, response.Code)
