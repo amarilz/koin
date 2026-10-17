@@ -67,8 +67,9 @@ jobs:
 
           declare -A notes
 
+          conventional_commit_regex='^([a-z]+)(\([^)]+\))?!?:[[:space:]]+(.+)$'
           while IFS= read -r subject; do
-            if [[ "$subject" =~ ^([a-z]+)(\([^)]+\))?!?:[[:space:]]+(.+)$ ]]; then
+            if [[ "$subject" =~ $conventional_commit_regex ]]; then
               type="${BASH_REMATCH[1]}"
               message="${BASH_REMATCH[3]}"
 
