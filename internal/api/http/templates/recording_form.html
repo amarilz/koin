@@ -10,16 +10,33 @@
             max-width: 640px;
         }
 
+        .main-content {
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 24px;
+        }
+
         .review-container {
             max-width: 900px;
-            margin-top: 32px;
+            margin-top: 0;
+        }
+
+        #reviewStatus {
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        #reviewList {
+            display: grid;
+            gap: 16px;
         }
 
         .review-card {
             padding: 24px;
-            margin-top: 20px;
             border: 1px solid #ddd;
             border-radius: 12px;
+            background: #fff;
         }
 
         .review-card h2 {
