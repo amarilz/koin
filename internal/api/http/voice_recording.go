@@ -23,13 +23,7 @@ import (
 
 const maxVoiceRecordingSize = 25 << 20
 
-func createVoiceRecordingHandler(
-	recordings repository.VoiceRecordingRepository,
-	transcriber *service.VoiceTranscriptionClient,
-	accounts *service.AccountService,
-	extractor *service.TransactionExtractionClient,
-	extractionQueue chan struct{},
-) gin.HandlerFunc {
+func createVoiceRecordingHandler(recordings repository.VoiceRecordingRepository, processor *voiceRecordingProcessor) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxVoiceRecordingSize+(1<<20))
 		file, header, err := c.Request.FormFile("audio")
@@ -71,29 +65,99 @@ func createVoiceRecordingHandler(
 			return
 		}
 
-		transcription, err := transcriber.Transcribe(c.Request.Context(), audioData, mimeType)
+		id, err := recordings.CreateVoiceRecording(c.Request.Context(), audioData, mimeType, durationMS)
 		if err != nil {
-			log.Printf("transcribe uploaded voice recording: %v", err)
-			c.JSON(http.StatusBadGateway, gin.H{"error": "impossibile trascrivere la registrazione"})
-			return
-		}
-
-		id, err := recordings.CreateVoiceRecording(c.Request.Context(), audioData, mimeType, durationMS, transcription)
-		if err != nil {
-			log.Printf("save transcribed voice recording: %v", err)
+			log.Printf("save voice recording: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "impossibile salvare la registrazione"})
 			return
 		}
 
-		extractionAvailable := false
-		if err := extractAndSaveTransaction(c.Request.Context(), recordings, accounts, extractor, extractionQueue, id, transcription); err != nil {
-			log.Printf("extract transaction from voice recording %d: %v", id, err)
-		} else {
-			extractionAvailable = true
-		}
+		log.Printf("voice recording audio saved | id=%d | audio_size=%d", id, len(audioData))
+		c.JSON(http.StatusCreated, gin.H{"id": id})
+		processor.Notify()
+	}
+}
 
-		log.Printf("voice recording transcribed and saved | id=%d | audio_size=%d | extraction_available=%t", id, len(audioData), extractionAvailable)
-		c.JSON(http.StatusCreated, gin.H{"id": id, "extractionAvailable": extractionAvailable})
+type voiceRecordingProcessor struct {
+	recordings      repository.VoiceRecordingRepository
+	pending         repository.VoiceRecordingReviewRepository
+	transcriber     *service.VoiceTranscriptionClient
+	accounts        *service.AccountService
+	extractor       *service.TransactionExtractionClient
+	extractionQueue chan struct{}
+	wake            chan struct{}
+}
+
+func newVoiceRecordingProcessor(
+	recordings repository.VoiceRecordingReviewRepository,
+	transcriber *service.VoiceTranscriptionClient,
+	accounts *service.AccountService,
+	extractor *service.TransactionExtractionClient,
+	extractionQueue chan struct{},
+) *voiceRecordingProcessor {
+	return &voiceRecordingProcessor{
+		recordings:      recordings,
+		pending:         recordings,
+		transcriber:     transcriber,
+		accounts:        accounts,
+		extractor:       extractor,
+		extractionQueue: extractionQueue,
+		wake:            make(chan struct{}, 1),
+	}
+}
+
+func (processor *voiceRecordingProcessor) Notify() {
+	select {
+	case processor.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (processor *voiceRecordingProcessor) Run(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		processor.processPending(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-processor.wake:
+		case <-ticker.C:
+		}
+	}
+}
+
+func (processor *voiceRecordingProcessor) processPending(ctx context.Context) {
+	pending, err := processor.pending.ListVoiceRecordingsPendingTranscription(ctx)
+	if err != nil {
+		log.Printf("list voice recordings pending transcription: %v", err)
+		return
+	}
+	for _, recording := range pending {
+		if ctx.Err() != nil {
+			return
+		}
+		audioData, mimeType, err := processor.pending.GetPendingVoiceRecordingAudio(ctx, recording.ID)
+		if err != nil {
+			log.Printf("load audio for voice recording %d: %v", recording.ID, err)
+			continue
+		}
+		if processor.transcriber == nil {
+			log.Printf("transcribe voice recording %d: transcription service is not configured", recording.ID)
+			continue
+		}
+		transcription, err := processor.transcriber.Transcribe(ctx, audioData, mimeType)
+		if err != nil {
+			log.Printf("transcribe voice recording %d: %v", recording.ID, err)
+			continue
+		}
+		if err := processor.recordings.SaveVoiceRecordingTranscription(ctx, recording.ID, transcription); err != nil {
+			log.Printf("save transcription for voice recording %d: %v", recording.ID, err)
+			continue
+		}
+		if err := extractAndSaveTransaction(ctx, processor.recordings, processor.accounts, processor.extractor, processor.extractionQueue, recording.ID, transcription); err != nil {
+			log.Printf("extract transaction from voice recording %d: %v", recording.ID, err)
+		}
 	}
 }
 

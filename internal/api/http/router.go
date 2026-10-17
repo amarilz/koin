@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 
 	apigen "koin/internal/api/generated"
@@ -34,7 +35,9 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	r.GET("/forms/categories", ServeForm("category_form.html"))
 	r.GET("/forms/recordings", ServeForm("recording_form.html"))
 	extractionQueue := make(chan struct{}, 1)
-	r.POST("/forms/recordings", createVoiceRecordingHandler(deps.Recordings, deps.Transcriber, deps.Accounts, deps.Extractor, extractionQueue))
+	processor := newVoiceRecordingProcessor(deps.Recordings, deps.Transcriber, deps.Accounts, deps.Extractor, extractionQueue)
+	go processor.Run(context.Background())
+	r.POST("/forms/recordings", createVoiceRecordingHandler(deps.Recordings, processor))
 	review := newVoiceRecordingReviewHandler(deps.Recordings, deps.Accounts, deps.Extractor, extractionQueue)
 	r.GET("/forms/recordings/reviewable", review.list)
 	r.POST("/forms/recordings/extract-pending", review.extractPending)

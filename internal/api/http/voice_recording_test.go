@@ -34,15 +34,19 @@ type recordingRepositoryStub struct {
 	deletedID     int64
 }
 
-func (repo *recordingRepositoryStub) CreateVoiceRecording(_ context.Context, audioData []byte, mimeType string, durationMS int64, transcription string) (int64, error) {
+func (repo *recordingRepositoryStub) CreateVoiceRecording(_ context.Context, audioData []byte, mimeType string, durationMS int64) (int64, error) {
 	repo.audioData = audioData
 	repo.mimeType = mimeType
 	repo.durationMS = durationMS
+	return 123, nil
+}
+
+func (repo *recordingRepositoryStub) SaveVoiceRecordingTranscription(_ context.Context, id int64, transcription string) error {
 	repo.transcription = transcription
 	repo.pending = append(repo.pending, repository.ReviewableVoiceRecording{
-		ID: int64(len(repo.pending) + 123), Transcription: transcription, MimeType: mimeType, DurationMS: durationMS,
+		ID: id, Transcription: transcription, MimeType: repo.mimeType, DurationMS: repo.durationMS,
 	})
-	return 123, nil
+	return nil
 }
 
 func (repo *recordingRepositoryStub) SaveTransactionExtraction(_ context.Context, id int64, extraction json.RawMessage) error {
@@ -57,6 +61,17 @@ func (repo *recordingRepositoryStub) SaveTransactionExtraction(_ context.Context
 
 func (repo *recordingRepositoryStub) ListReviewableVoiceRecordings(context.Context) ([]repository.ReviewableVoiceRecording, error) {
 	return repo.pending, nil
+}
+
+func (repo *recordingRepositoryStub) ListVoiceRecordingsPendingTranscription(context.Context) ([]repository.PendingVoiceRecording, error) {
+	if repo.transcription == "" && len(repo.audioData) > 0 {
+		return []repository.PendingVoiceRecording{{ID: 123, MimeType: repo.mimeType}}, nil
+	}
+	return nil, nil
+}
+
+func (repo *recordingRepositoryStub) GetPendingVoiceRecordingAudio(context.Context, int64) ([]byte, string, error) {
+	return repo.audioData, repo.mimeType, nil
 }
 
 func (repo *recordingRepositoryStub) ListPendingTransactionExtractions(context.Context) ([]repository.ReviewableVoiceRecording, error) {
@@ -126,7 +141,14 @@ func (extractionOptionsRepositoryStub) GetCategories(context.Context) ([]dbgen.C
 
 func TestCreateVoiceRecordingHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	var transcriptionRequests atomic.Int32
+	transcriptionUnavailable := false
 	transcriptionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		transcriptionRequests.Add(1)
+		if transcriptionUnavailable {
+			http.Error(w, "Whisper unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		if r.Method != http.MethodPost {
 			t.Errorf("expected transcription POST, got %s", r.Method)
 		}
@@ -209,13 +231,17 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/forms/recordings", body)
 	request.Header.Set("Content-Type", contentType)
 	recorder := httptest.NewRecorder()
-	context, _ := gin.CreateTestContext(recorder)
-	context.Request = request
+	ginContext, _ := gin.CreateTestContext(recorder)
+	ginContext.Request = request
 
-	createVoiceRecordingHandler(repo, transcriber, accounts, extractor, make(chan struct{}, 1))(context)
+	processor := newVoiceRecordingProcessor(repo, transcriber, accounts, extractor, make(chan struct{}, 1))
+	createVoiceRecordingHandler(repo, processor)(ginContext)
 
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, recorder.Code, recorder.Body.String())
+	}
+	if transcriptionRequests.Load() != 0 {
+		t.Fatal("expected the request to return before transcription starts")
 	}
 	if !bytes.Equal(repo.audioData, []byte("recorded audio")) {
 		t.Errorf("unexpected audio data %q", repo.audioData)
@@ -226,16 +252,20 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 	if repo.durationMS != 1500 {
 		t.Errorf("expected duration 1500ms, got %d", repo.durationMS)
 	}
+	if repo.transcription != "" {
+		t.Errorf("expected transcription to remain pending after the response, got %q", repo.transcription)
+	}
+
+	processor.processPending(context.Background())
 	if repo.transcription != "trascrizione immediata" {
-		t.Errorf("expected transcription to be saved immediately, got %q", repo.transcription)
+		t.Errorf("expected background processing to save the transcription, got %q", repo.transcription)
 	}
 	if got, want := string(repo.extraction), `{"accountName":"Contanti","accountTo":null,"categoryType":"EXPENSE","categoryName":"Bar","amount":5,"occurredAt":null,"description":"Caffè"}`; got != want {
-		t.Errorf("expected immediate extraction to be saved, got %q", got)
+		t.Errorf("expected background extraction to be saved, got %q", got)
 	}
 
 	var response struct {
-		ID                  int64 `json:"id"`
-		ExtractionAvailable bool  `json:"extractionAvailable"`
+		ID int64 `json:"id"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
@@ -243,34 +273,47 @@ func TestCreateVoiceRecordingHandler(t *testing.T) {
 	if response.ID != 123 {
 		t.Errorf("expected recording ID 123, got %d", response.ID)
 	}
-	if !response.ExtractionAvailable {
-		t.Error("expected immediate extraction to be reported as available")
-	}
 
 	extractionUnavailable = true
 	pendingRepo := &recordingRepositoryStub{}
 	pendingRequest := httptest.NewRequest(http.MethodPost, "/forms/recordings", bytes.NewReader(requestBody))
 	pendingRequest.Header.Set("Content-Type", contentType)
 	pendingRecorder := httptest.NewRecorder()
-	pendingContext, _ := gin.CreateTestContext(pendingRecorder)
-	pendingContext.Request = pendingRequest
+	pendingGinContext, _ := gin.CreateTestContext(pendingRecorder)
+	pendingGinContext.Request = pendingRequest
 
-	createVoiceRecordingHandler(pendingRepo, transcriber, accounts, extractor, make(chan struct{}, 1))(pendingContext)
+	pendingProcessor := newVoiceRecordingProcessor(pendingRepo, transcriber, accounts, extractor, make(chan struct{}, 1))
+	createVoiceRecordingHandler(pendingRepo, pendingProcessor)(pendingGinContext)
 
 	if pendingRecorder.Code != http.StatusCreated {
-		t.Fatalf("expected unavailable Ollama to still save the transcription with status %d, got %d: %s", http.StatusCreated, pendingRecorder.Code, pendingRecorder.Body.String())
+		t.Fatalf("expected audio to be saved before Ollama processing with status %d, got %d: %s", http.StatusCreated, pendingRecorder.Code, pendingRecorder.Body.String())
 	}
+	pendingProcessor.processPending(context.Background())
 	if pendingRepo.transcription != "trascrizione immediata" || len(pendingRepo.extraction) != 0 {
-		t.Errorf("expected transcription to remain pending after Ollama failure, got transcription=%q extraction=%q", pendingRepo.transcription, pendingRepo.extraction)
+		t.Errorf("expected transcription to be saved and extraction to remain pending after Ollama failure, got transcription=%q extraction=%q", pendingRepo.transcription, pendingRepo.extraction)
 	}
-	var pendingResponse struct {
-		ExtractionAvailable bool `json:"extractionAvailable"`
+
+	transcriptionUnavailable = true
+	unavailableRepo := &recordingRepositoryStub{}
+	unavailableRequest := httptest.NewRequest(http.MethodPost, "/forms/recordings", bytes.NewReader(requestBody))
+	unavailableRequest.Header.Set("Content-Type", contentType)
+	unavailableRecorder := httptest.NewRecorder()
+	unavailableGinContext, _ := gin.CreateTestContext(unavailableRecorder)
+	unavailableGinContext.Request = unavailableRequest
+	unavailableProcessor := newVoiceRecordingProcessor(unavailableRepo, transcriber, accounts, extractor, make(chan struct{}, 1))
+	createVoiceRecordingHandler(unavailableRepo, unavailableProcessor)(unavailableGinContext)
+	if unavailableRecorder.Code != http.StatusCreated {
+		t.Fatalf("expected Whisper outage not to affect the saved recording response, got %d: %s", unavailableRecorder.Code, unavailableRecorder.Body.String())
 	}
-	if err := json.Unmarshal(pendingRecorder.Body.Bytes(), &pendingResponse); err != nil {
-		t.Fatal(err)
+	unavailableProcessor.processPending(context.Background())
+	if !bytes.Equal(unavailableRepo.audioData, []byte("recorded audio")) || unavailableRepo.transcription != "" {
+		t.Errorf("expected audio to remain stored and pending when Whisper is unavailable, got audio=%q transcription=%q", unavailableRepo.audioData, unavailableRepo.transcription)
 	}
-	if pendingResponse.ExtractionAvailable {
-		t.Error("expected failed immediate extraction to be reported as pending")
+
+	transcriptionUnavailable = false
+	unavailableProcessor.processPending(context.Background())
+	if unavailableRepo.transcription != "trascrizione immediata" {
+		t.Errorf("expected pending audio to be transcribed after Whisper recovers, got %q", unavailableRepo.transcription)
 	}
 }
 

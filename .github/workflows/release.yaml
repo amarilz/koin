@@ -45,8 +45,59 @@ jobs:
             exit 0
           fi
 
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            RANGE="$PREVIOUS_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          declare -A sections=(
+            [feat]="Features"
+            [fix]="Bug Fixes"
+            [perf]="Performance"
+            [refactor]="Refactoring"
+            [docs]="Documentation"
+            [test]="Tests"
+            [build]="Build"
+            [ci]="CI"
+            [chore]="Maintenance"
+          )
+
+          declare -A notes
+
+          while IFS= read -r subject; do
+            if [[ "$subject" =~ ^([a-z]+)(\([^)]+\))?!?:[[:space:]]+(.+)$ ]]; then
+              type="${BASH_REMATCH[1]}"
+              message="${BASH_REMATCH[3]}"
+
+              if [[ -n "${sections[$type]:-}" ]]; then
+                notes[$type]+="- $message"$'\n'
+              fi
+            fi
+          done < <(git log "$RANGE" --no-merges --pretty=format:%s)
+
+          {
+            echo "# $TAG"
+            echo
+
+            for type in feat fix perf refactor docs test build ci chore; do
+              if [[ -n "${notes[$type]:-}" ]]; then
+                echo "## ${sections[$type]}"
+                echo
+                printf '%s\n' "${notes[$type]}"
+              fi
+            done
+
+            if [[ -n "$PREVIOUS_TAG" ]]; then
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${TAG}"
+            fi
+          } > release-notes.md
+
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           gh release create "$TAG" \
             --title "$TAG" \
-            --generate-notes
+            --notes-file release-notes.md
