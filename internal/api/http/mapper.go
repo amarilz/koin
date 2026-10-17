@@ -13,21 +13,6 @@ func ToCreateAccountDto(in *apigen.CreateAccountJSONRequestBody) dto.CreateAccou
 	}
 }
 
-func ToAddExpenseDto(in *apigen.AddTransactionJSONRequestBody) dto.AddTransactionDto {
-	var desc *string
-	if in.Description != "" {
-		desc = &in.Description
-	}
-	return dto.AddTransactionDto{
-		AccountName:  in.AccountName,
-		CategoryName: in.CategoryName,
-		CategoryType: dto.CategoryType(in.CategoryType),
-		OccurredAt:   in.OccurredAt.Time,
-		Amount:       in.Amount,
-		Description:  desc,
-	}
-}
-
 func ToCreateCategoryDto(in *apigen.CreateCategoryJSONRequestBody) dto.CreateCategoryDto {
 	description := ""
 	if in.Description != nil {

@@ -188,7 +188,7 @@ func TestPagesArePublicAndAuthenticationRoutesAreRemoved(t *testing.T) {
 		Recordings: &recordingRepositoryStub{},
 	})
 
-	for _, path := range []string{"/forms", "/forms/accounts", "/forms/categories", "/forms/transactions", "/forms/recordings"} {
+	for _, path := range []string{"/forms", "/forms/recordings", "/forms/accounts", "/forms/categories"} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {
@@ -196,11 +196,17 @@ func TestPagesArePublicAndAuthenticationRoutesAreRemoved(t *testing.T) {
 		}
 	}
 
-	for _, path := range []string{"/login", "/signup", "/logout"} {
+	for _, path := range []string{"/login", "/signup", "/logout", "/forms/transactions"} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusNotFound {
 			t.Errorf("GET %s: expected status %d, got %d", path, http.StatusNotFound, response.Code)
 		}
+	}
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/expenses", nil))
+	if response.Code != http.StatusNotFound {
+		t.Errorf("POST /api/v1/expenses: expected status %d, got %d", http.StatusNotFound, response.Code)
 	}
 }

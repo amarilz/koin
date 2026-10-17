@@ -30,7 +30,6 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	r.GET("/health", Health)
 	r.GET("/forms/common.css", ServeCommonCSS)
 	r.GET("/forms", FormsIndex)
-	r.GET("/forms/transactions", ServeForm("transaction_form.html"))
 	r.GET("/forms/accounts", ServeForm("account_form.html"))
 	r.GET("/forms/categories", ServeForm("category_form.html"))
 	r.GET("/forms/recordings", ServeForm("recording_form.html"))

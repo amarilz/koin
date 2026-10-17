@@ -8,8 +8,6 @@ servers:
   - url: http://localhost:8080/
 
 tags:
-  - name: Expenses
-    description: Operazioni CRUD sulle spese
   - name: Accounts
     description: Operazioni CRUD sugli account
   - name: Categories
@@ -124,28 +122,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /v1/expenses:
-
-    post:
-      tags: [ Expenses ]
-      summary: Crea una spesa
-      operationId: addTransaction
-      requestBody:
-        $ref: '#/components/requestBodies/AddTransactionRequestBody'
-      responses:
-        "201":
-          description: Spesa creata
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AddTransactionResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
   /v1/transfers:
     post:
       tags: [ Transfers ]
@@ -181,13 +157,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/CreateCategoryRequest"
-    AddTransactionRequestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/AddTransactionRequest"
-
     TransferBetweenAccountsRequestBody:
       required: true
       content:
@@ -293,45 +262,6 @@ components:
           type: string
         categoryType:
           type: string
-
-    AddTransactionRequest:
-      type: object
-      required:
-        - accountName
-        - categoryName
-        - categoryType
-        - amount
-        - occurredAt
-        - description
-      properties:
-        accountName:
-          type: string
-        categoryName:
-          type: string
-        categoryType:
-          type: string
-        amount:
-          type: integer
-          format: int64
-          example: 30 # 3000 = 30 euro
-        occurredAt:
-          type: string
-          format: date
-          example: "2026-01-17"
-        description:
-          type: string
-          nullable: false
-          example: "Pranzo"
-
-    AddTransactionResponse:
-      type: object
-      properties:
-        transactionId:
-          type: integer
-          format: int64
-        amount:
-          type: integer
-          format: int64
 
     TransactionItem:
       type: object
