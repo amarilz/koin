@@ -576,12 +576,10 @@
                     throw new Error(result.error || 'Impossibile salvare la registrazione.');
                 }
 
-                successMessage.textContent = result.extractionAvailable
-                    ? `Registrazione trascritta, analizzata e salvata (ID: ${result.id}).`
-                    : `Registrazione trascritta e salvata (ID: ${result.id}). L’estrazione LLM è in attesa; puoi avviarla con il pulsante nella lista.`;
+                successMessage.textContent = `Audio salvato (ID: ${result.id}). Trascrizione e analisi sono in corso in background.`;
                 successMessage.style.display = 'block';
                 discardRecording();
-                recordingStatus.textContent = 'Registrazione trascritta e salvata. Puoi registrarne una nuova.';
+                recordingStatus.textContent = 'Audio salvato. Puoi registrarne una nuova mentre la trascrizione viene elaborata.';
                 await loadReviewableRecordings();
             } catch (error) {
                 errorMessage.textContent = error.message || 'Errore durante il salvataggio della registrazione.';
