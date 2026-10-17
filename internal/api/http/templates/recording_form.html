@@ -69,6 +69,17 @@
             color: #b00020;
         }
 
+        .review-card .date-fallback input[type="date"] {
+            border: 2px solid #b00020;
+            box-shadow: 0 0 0 2px rgba(176, 0, 32, 0.12);
+        }
+
+        .review-card .date-fallback-hint {
+            display: block;
+            margin-top: 6px;
+            color: #b00020;
+        }
+
         .recording-reminder {
             margin: 24px 0 0;
             padding: 18px;
@@ -490,6 +501,11 @@
             const targetField = createField('Account di destinazione *', 'accountTo', 'text', { required: true, list: accountNames });
             const amountField = createField('Importo (€) *', 'amount', 'number', { required: true, min: '0.01', step: '0.01' });
             const dateField = createField('Data *', 'occurredAt', 'date', { required: true });
+            const dateFallbackHint = document.createElement('small');
+            dateFallbackHint.className = 'date-fallback-hint';
+            dateFallbackHint.textContent = 'Data non rilevata: impostata a oggi. Verificala prima di confermare.';
+            dateFallbackHint.hidden = true;
+            dateField.group.appendChild(dateFallbackHint);
             const descriptionField = createField('Descrizione', 'description', 'textarea', { fullWidth: true });
             fieldGrid.append(accountField.group, typeField.group, categoryField.group, targetField.group, amountField.group, dateField.group, descriptionField.group);
             const missing = document.createElement('p');
@@ -515,6 +531,13 @@
             typeField.input.addEventListener('change', updateFields);
             updateFields();
 
+            function clearDateFallbackIndicator() {
+                dateField.group.classList.remove('date-fallback');
+                dateFallbackHint.hidden = true;
+            }
+            dateField.input.addEventListener('input', clearDateFallbackIndicator);
+            dateField.input.addEventListener('change', clearDateFallbackIndicator);
+
             extractButton.addEventListener('click', async () => {
                 extractButton.disabled = true;
                 extractButton.textContent = 'Estrazione in corso...';
@@ -531,7 +554,20 @@
                     typeField.input.value = result.categoryType || '';
                     categoryField.input.value = result.categoryName || '';
                     amountField.input.value = result.amount ?? '';
-                    dateField.input.value = result.occurredAt || '';
+                    const dateWasNotExtracted = !result.occurredAt;
+                    if (dateWasNotExtracted) {
+                        const today = new Date();
+                        dateField.input.value = [
+                            today.getFullYear(),
+                            String(today.getMonth() + 1).padStart(2, '0'),
+                            String(today.getDate()).padStart(2, '0')
+                        ].join('-');
+                        dateField.group.classList.add('date-fallback');
+                        dateFallbackHint.hidden = false;
+                    } else {
+                        dateField.input.value = result.occurredAt;
+                        clearDateFallbackIndicator();
+                    }
                     descriptionField.input.value = result.description || '';
                     updateFields();
                     const missingFields = [];

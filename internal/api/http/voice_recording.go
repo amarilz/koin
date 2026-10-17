@@ -214,7 +214,7 @@ func (handler *voiceRecordingReviewHandler) confirm(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "account e importo positivo sono obbligatori"})
 		return
 	}
-	occurredAt, err := time.Parse("2006-01-02", request.OccurredAt)
+	occurredAt, err := parseOccurredAt(request.OccurredAt)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "la data deve essere nel formato YYYY-MM-DD"})
 		return
@@ -307,4 +307,11 @@ func optionalDescription(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func parseOccurredAt(value string) (time.Time, error) {
+	if strings.TrimSpace(value) == "" {
+		value = time.Now().Format("2006-01-02")
+	}
+	return time.Parse("2006-01-02", value)
 }

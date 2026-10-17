@@ -12,6 +12,9 @@ func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
+		if c.Request.Method == http.MethodGet {
+			return
+		}
 		log.Printf(
 			"HTTP request | method=%s | path=%s | status=%d | duration=%s | client=%s",
 			c.Request.Method,

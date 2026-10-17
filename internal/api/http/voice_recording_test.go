@@ -155,6 +155,26 @@ func TestDeletePendingVoiceRecordingHandler(t *testing.T) {
 	}
 }
 
+func TestParseOccurredAtDefaultsToTodayWhenMissing(t *testing.T) {
+	occurredAt, err := parseOccurredAt("")
+	if err != nil {
+		t.Fatalf("parse missing date: %v", err)
+	}
+	if got, want := occurredAt.Format("2006-01-02"), time.Now().Format("2006-01-02"); got != want {
+		t.Errorf("expected today's date %q, got %q", want, got)
+	}
+}
+
+func TestParseOccurredAtPreservesProvidedDate(t *testing.T) {
+	occurredAt, err := parseOccurredAt("2025-03-14")
+	if err != nil {
+		t.Fatalf("parse provided date: %v", err)
+	}
+	if got, want := occurredAt.Format("2006-01-02"), "2025-03-14"; got != want {
+		t.Errorf("expected date %q, got %q", want, got)
+	}
+}
+
 func TestTemplatesParse(t *testing.T) {
 	if _, err := template.ParseGlob("templates/*.html"); err != nil {
 		t.Fatalf("parse HTML templates: %v", err)
