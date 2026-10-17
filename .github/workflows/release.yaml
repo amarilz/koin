@@ -1,10 +1,17 @@
+
 name: Release
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -19,19 +26,22 @@ jobs:
       - name: Create tag and GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           VERSION="$(tr -d '[:space:]' < VERSION)"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "VERSION must contain a valid semantic version, got: $VERSION" >&2
+            echo "Invalid semantic version: $VERSION" >&2
             exit 1
           fi
 
           TAG="v$VERSION"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists." >&2
-            exit 1
+            echo "Tag $TAG already exists. Skipping release."
+            exit 0
           fi
 
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
-          gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes
