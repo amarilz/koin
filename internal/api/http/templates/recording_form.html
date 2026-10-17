@@ -14,78 +14,206 @@
             flex-direction: column;
             justify-content: flex-start;
             align-items: center;
-            gap: 24px;
+            gap: 16px;
         }
 
         .review-container {
-            max-width: 900px;
+            max-width: 1040px;
             margin-top: 0;
+            padding: 24px;
+        }
+
+        .review-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .review-heading h1 {
+            margin-bottom: 4px;
+            font-size: 24px;
+        }
+
+        .review-heading .subtitle {
+            margin: 0;
         }
 
         #reviewStatus {
             color: #666;
-            margin-bottom: 12px;
+            margin: 0 0 12px;
+            font-size: 13px;
         }
 
         #extractPendingButton {
-            margin: 0 0 16px;
             background: #b00020;
             color: #fff;
+            flex: 0 0 auto;
+            width: auto;
+            padding: 10px 14px;
+            font-size: 14px;
         }
 
-        .review-card .extraction-status {
-            margin: 0 0 12px;
-            font-weight: 600;
-        }
-
-        .review-card .extraction-pending {
-            color: #b00020;
-        }
-
-        .review-card .extraction-complete {
-            color: #2e7d32;
+        #extractPendingButton:hover {
+            background: #8e001a;
         }
 
         #reviewList {
             display: grid;
-            gap: 16px;
+            gap: 12px;
         }
 
         .review-card {
-            padding: 24px;
-            border: 1px solid #ddd;
-            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #e2e5ec;
+            border-radius: 10px;
             background: #fff;
         }
 
+        .review-card-pending {
+            border-left: 3px solid #b00020;
+            padding-left: 14px;
+        }
+
+        .review-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .review-card-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
         .review-card h2 {
-            margin-top: 0;
+            margin: 0;
+            color: #333;
+            font-size: 17px;
+        }
+
+        .review-card .extraction-status {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .review-card .extraction-pending {
+            background: #fff0f1;
+            color: #a51b2b;
+        }
+
+        .review-card .extraction-complete {
+            background: #eaf6ed;
+            color: #26733a;
+        }
+
+        .review-card .btn-delete {
+            flex: 0 0 auto;
+            width: auto;
+            padding: 7px 10px;
+            font-size: 12px;
+        }
+
+        .recording-details {
+            margin: 0 0 12px;
+            border: 1px solid #eceef2;
+            border-radius: 7px;
+            background: #fafbfc;
+        }
+
+        .recording-details summary {
+            padding: 8px 10px;
+            color: #4d5563;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .recording-details-content {
+            padding: 0 10px 10px;
         }
 
         .transcription-text {
-            padding: 16px;
-            border-radius: 8px;
-            background: #f7f7f7;
+            margin: 0;
+            color: #424956;
+            font-size: 13px;
             white-space: pre-wrap;
         }
 
         .review-card audio {
             width: 100%;
-            margin: 8px 0 16px;
+            height: 38px;
+            margin-top: 8px;
         }
 
         .review-card .field-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0 16px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0 12px;
+        }
+
+        .review-form-title {
+            margin: 0 0 10px;
+            color: #555d6a;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .review-card .form-group {
+            margin-bottom: 12px;
+        }
+
+        .review-card label {
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .review-card input[type="text"],
+        .review-card input[type="date"],
+        .review-card input[type="number"],
+        .review-card select,
+        .review-card textarea {
+            padding: 9px 10px;
+            font-size: 13px;
         }
 
         .review-card .form-group.full-width {
             grid-column: 1 / -1;
         }
 
+        .review-form-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 2px;
+        }
+
         .review-card .review-error {
+            margin: 0;
             color: #b00020;
+            font-size: 13px;
+        }
+
+        .review-card [role="status"] {
+            margin: 0;
+            color: #616977;
+            font-size: 12px;
+        }
+
+        .review-card .btn-submit {
+            flex: 0 0 auto;
+            width: auto;
+            padding: 10px 14px;
+            font-size: 13px;
         }
 
         .review-card .date-fallback input[type="date"] {
@@ -173,13 +301,44 @@
             transform: none;
         }
 
+        @media (max-width: 760px) {
+            .review-card .field-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
         @media (max-width: 600px) {
             .recording-container .button-group {
                 flex-direction: column;
             }
 
+            .review-container {
+                padding: 18px;
+            }
+
+            .review-heading {
+                flex-direction: column;
+            }
+
+            #extractPendingButton {
+                width: 100%;
+            }
+
             .review-card .field-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .review-card .form-group.full-width {
+                grid-column: auto;
+            }
+
+            .review-form-footer {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .review-card .btn-submit {
+                width: 100%;
             }
         }
     </style>
@@ -235,10 +394,14 @@
         </section>
 
         <section class="container review-container">
-            <h1>Trascrizioni da confermare</h1>
-            <p class="subtitle">Controlla i dati estratti, correggi i campi mancanti e conferma per creare la transazione.</p>
+            <div class="review-heading">
+                <div>
+                    <h1>Trascrizioni da confermare</h1>
+                    <p class="subtitle">Verifica i dati, completa quelli mancanti e conferma.</p>
+                </div>
+                <button type="button" class="btn-submit" id="extractPendingButton" hidden>Estrai i dati mancanti con Ollama</button>
+            </div>
             <p id="reviewStatus" role="status">Caricamento registrazioni...</p>
-            <button type="button" class="btn-submit" id="extractPendingButton" hidden>Estrai i dati mancanti con Ollama</button>
             <div id="reviewList"></div>
         </section>
     </main>
@@ -484,9 +647,13 @@
 
         function renderReviewCard(recording) {
             const card = document.createElement('article');
-            card.className = 'review-card';
+            card.className = recording.extraction ? 'review-card' : 'review-card review-card-pending';
             card.dataset.id = recording.id;
 
+            const cardHeader = document.createElement('div');
+            cardHeader.className = 'review-card-header';
+            const cardHeading = document.createElement('div');
+            cardHeading.className = 'review-card-heading';
             const title = document.createElement('h2');
             title.textContent = `Registrazione #${recording.id}`;
             const extractionStatus = document.createElement('p');
@@ -496,8 +663,19 @@
             extractionStatus.textContent = recording.extraction
                 ? 'Estrazione LLM completata'
                 : 'Estrazione LLM in attesa';
-            const transcriptLabel = document.createElement('strong');
-            transcriptLabel.textContent = 'Trascrizione';
+            cardHeading.append(title, extractionStatus);
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'btn-delete';
+            deleteButton.textContent = 'Elimina';
+            cardHeader.append(cardHeading, deleteButton);
+
+            const recordingDetails = document.createElement('details');
+            recordingDetails.className = 'recording-details';
+            const recordingSummary = document.createElement('summary');
+            recordingSummary.textContent = 'Mostra trascrizione e audio';
+            const recordingDetailsContent = document.createElement('div');
+            recordingDetailsContent.className = 'recording-details-content';
             const transcript = document.createElement('p');
             transcript.className = 'transcription-text';
             transcript.textContent = recording.transcription;
@@ -505,11 +683,13 @@
             audio.controls = true;
             audio.preload = 'none';
             audio.src = `/forms/recordings/${recording.id}/audio`;
-            const deleteButton = document.createElement('button');
-            deleteButton.type = 'button';
-            deleteButton.className = 'btn-delete';
-            deleteButton.textContent = 'Elimina trascrizione';
+            recordingDetailsContent.append(transcript, audio);
+            recordingDetails.append(recordingSummary, recordingDetailsContent);
+
             const form = document.createElement('form');
+            const formTitle = document.createElement('h3');
+            formTitle.className = 'review-form-title';
+            formTitle.textContent = 'Dati della transazione';
             const fieldGrid = document.createElement('div');
             fieldGrid.className = 'field-grid';
 
@@ -537,12 +717,17 @@
             const error = document.createElement('p');
             error.className = 'review-error';
             error.setAttribute('role', 'alert');
+            const footer = document.createElement('div');
+            footer.className = 'review-form-footer';
+            const feedback = document.createElement('div');
+            feedback.append(missing, error);
             const submit = document.createElement('button');
             submit.type = 'submit';
             submit.className = 'btn-submit';
             submit.textContent = 'Conferma e crea transazione';
-            form.append(fieldGrid, missing, error, submit);
-            card.append(title, extractionStatus, transcriptLabel, transcript, audio, deleteButton, form);
+            footer.append(feedback, submit);
+            form.append(formTitle, fieldGrid, footer);
+            card.append(cardHeader, recordingDetails, form);
             reviewList.appendChild(card);
 
             function updateFields() {
