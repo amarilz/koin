@@ -16,52 +16,89 @@ func NewVoiceRecordingRepository(db *sql.DB) *VoiceRecordingRepository {
 	return &VoiceRecordingRepository{db: db}
 }
 
-func (repo *VoiceRecordingRepository) CreateVoiceRecording(ctx context.Context, audioData []byte, mimeType string, durationMS int64) (int64, error) {
+func (repo *VoiceRecordingRepository) CreateVoiceRecording(ctx context.Context, audioData []byte, mimeType string, durationMS int64, transcription string) (int64, error) {
 	var id int64
 	err := repo.db.QueryRowContext(ctx, `
-		INSERT INTO voice_recordings (audio_data, mime_type, duration_ms)
-		VALUES ($1, $2, $3)
+		INSERT INTO voice_recordings (audio_data, mime_type, duration_ms, transcription)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
-	`, audioData, mimeType, durationMS).Scan(&id)
+	`, audioData, mimeType, durationMS, transcription).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("create voice recording: %w", err)
 	}
 	return id, nil
 }
 
-func (repo *VoiceRecordingRepository) GetNextUntranscribedVoiceRecording(ctx context.Context, afterID int64) (*repository.PendingVoiceRecording, error) {
-	recording := &repository.PendingVoiceRecording{}
-	err := repo.db.QueryRowContext(ctx, `
-		SELECT id, audio_data, mime_type
+func (repo *VoiceRecordingRepository) ListReviewableVoiceRecordings(ctx context.Context) ([]repository.ReviewableVoiceRecording, error) {
+	rows, err := repo.db.QueryContext(ctx, `
+		SELECT id, transcription, mime_type, duration_ms, created_at
 		FROM voice_recordings
-		WHERE transcription IS NULL AND id > $1
-		ORDER BY id
-		LIMIT 1
-	`, afterID).Scan(&recording.ID, &recording.AudioData, &recording.MimeType)
+		WHERE transcription IS NOT NULL
+		ORDER BY created_at DESC, id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list reviewable voice recordings: %w", err)
+	}
+	defer rows.Close()
+
+	recordings := make([]repository.ReviewableVoiceRecording, 0)
+	for rows.Next() {
+		var recording repository.ReviewableVoiceRecording
+		if err := rows.Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan reviewable voice recording: %w", err)
+		}
+		recordings = append(recordings, recording)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate reviewable voice recordings: %w", err)
+	}
+	return recordings, nil
+}
+
+func (repo *VoiceRecordingRepository) GetVoiceRecordingAudio(ctx context.Context, id int64) ([]byte, string, error) {
+	var audioData []byte
+	var mimeType string
+	err := repo.db.QueryRowContext(ctx, `
+		SELECT audio_data, mime_type
+		FROM voice_recordings
+		WHERE id = $1 AND transcription IS NOT NULL
+	`, id).Scan(&audioData, &mimeType)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, "", fmt.Errorf("%w: voice recording %d", sql.ErrNoRows, id)
 		}
-		return nil, fmt.Errorf("get next untranscribed voice recording: %w", err)
+		return nil, "", fmt.Errorf("get audio for voice recording %d: %w", id, err)
+	}
+	return audioData, mimeType, nil
+}
+
+func (repo *VoiceRecordingRepository) GetReviewableVoiceRecording(ctx context.Context, id int64) (repository.ReviewableVoiceRecording, error) {
+	var recording repository.ReviewableVoiceRecording
+	err := repo.db.QueryRowContext(ctx, `
+		SELECT id, transcription, mime_type, duration_ms, created_at
+		FROM voice_recordings
+		WHERE id = $1 AND transcription IS NOT NULL
+	`, id).Scan(&recording.ID, &recording.Transcription, &recording.MimeType, &recording.DurationMS, &recording.CreatedAt)
+	if err != nil {
+		return repository.ReviewableVoiceRecording{}, fmt.Errorf("get reviewable voice recording %d: %w", id, err)
 	}
 	return recording, nil
 }
 
-func (repo *VoiceRecordingRepository) SaveVoiceRecordingTranscription(ctx context.Context, id int64, transcription string) error {
+func (repo *VoiceRecordingRepository) DeletePendingVoiceRecording(ctx context.Context, id int64) error {
 	result, err := repo.db.ExecContext(ctx, `
-		UPDATE voice_recordings
-		SET transcription = $2
-		WHERE id = $1 AND transcription IS NULL
-	`, id, transcription)
+		DELETE FROM voice_recordings
+		WHERE id = $1 AND transcription IS NOT NULL
+	`, id)
 	if err != nil {
-		return fmt.Errorf("save voice recording transcription: %w", err)
+		return fmt.Errorf("delete pending voice recording %d: %w", id, err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("check saved voice recording transcription: %w", err)
+		return fmt.Errorf("check deleted voice recording %d: %w", id, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("save voice recording transcription: recording %d was not pending", id)
+		return fmt.Errorf("%w: voice recording %d is missing or has no transcription", sql.ErrNoRows, id)
 	}
 	return nil
 }

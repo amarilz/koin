@@ -60,13 +60,27 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	transcriptionService := service.NewVoiceTranscriptionService(recordingRepo, transcriptionClient)
-	go transcriptionService.Run(context.Background())
 	log.Println("transcription service configured")
+	ollamaURL := os.Getenv("OLLAMA_BASE_URL")
+	if ollamaURL == "" {
+		ollamaURL = "http://host.docker.internal:11434"
+	}
+	ollamaModel := os.Getenv("OLLAMA_MODEL")
+	if ollamaModel == "" {
+		ollamaModel = "qwen3.5-9b"
+	}
+	extractionClient, err := service.NewTransactionExtractionClient(ollamaURL, ollamaModel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("transaction extraction configured | ollama_model=%s", ollamaModel)
 
 	routerDeps := http.RouterDeps{
-		Controller: controller,
-		Recordings: recordingRepo,
+		Controller:  controller,
+		Recordings:  recordingRepo,
+		Transcriber: transcriptionClient,
+		Accounts:    accountService,
+		Extractor:   extractionClient,
 	}
 	router := http.NewRouter(routerDeps)
 

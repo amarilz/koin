@@ -65,6 +65,8 @@ services:
     environment:
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@koin-postgres:5432/${DB_NAME}?sslmode=disable
       - TRANSCRIPTION_SERVICE_URL=http://whisper:8000/transcribe
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5-9b}
     ports:
       - "8080:8080"
     networks:

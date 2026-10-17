@@ -10,6 +10,77 @@
             max-width: 640px;
         }
 
+        .review-container {
+            max-width: 900px;
+            margin-top: 32px;
+        }
+
+        .review-card {
+            padding: 24px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+        }
+
+        .review-card h2 {
+            margin-top: 0;
+        }
+
+        .transcription-text {
+            padding: 16px;
+            border-radius: 8px;
+            background: #f7f7f7;
+            white-space: pre-wrap;
+        }
+
+        .review-card audio {
+            width: 100%;
+            margin: 8px 0 16px;
+        }
+
+        .review-card .field-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0 16px;
+        }
+
+        .review-card .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .review-card .review-error {
+            color: #b00020;
+        }
+
+        .recording-reminder {
+            margin: 24px 0 0;
+            padding: 18px;
+            border-radius: 8px;
+            background: #f7f7f7;
+            color: #333;
+            text-align: left;
+        }
+
+        .recording-reminder h2 {
+            margin-top: 0;
+            font-size: 20px;
+        }
+
+        .recording-reminder ul {
+            padding-left: 22px;
+        }
+
+        .recording-reminder li {
+            margin: 8px 0;
+        }
+
+        .recording-reminder .example {
+            padding: 12px;
+            border-left: 4px solid #4a90e2;
+            background: #fff;
+            font-style: italic;
+        }
+
         .recording-status {
             min-height: 24px;
             margin: 20px 0;
@@ -59,6 +130,10 @@
             .recording-container .button-group {
                 flex-direction: column;
             }
+
+            .review-card .field-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -96,6 +171,28 @@
                 <button type="button" class="btn-submit" id="confirmButton">Conferma e salva</button>
                 <button type="button" class="btn-delete" id="deleteButton">Elimina registrazione</button>
             </div>
+
+            <aside class="recording-reminder" aria-labelledby="recordingReminderTitle">
+                <h2 id="recordingReminderTitle">Cosa dire nella registrazione</h2>
+                <p>Per aiutare l’estrazione, indica questi dati. Puoi riascoltare e correggere tutto prima di confermare.</p>
+                <ul>
+                    <li><strong>Tipo:</strong> spesa, entrata oppure trasferimento tra account.</li>
+                    <li><strong>Account:</strong> il nome esatto dell’account usato; per un trasferimento, specifica account di partenza e di destinazione.</li>
+                    <li><strong>Categoria:</strong> per spese ed entrate, indica la categoria.</li>
+                    <li><strong>Importo:</strong> la cifra e la valuta.</li>
+                    <li><strong>Data:</strong> il giorno in cui è avvenuta l’operazione.</li>
+                    <li><strong>Descrizione:</strong> una breve nota, se utile.</li>
+                </ul>
+                <p class="example">Esempio: “Spesa di 12 euro e 50 al supermercato, categoria alimentari, pagata con account Contanti, oggi. Descrizione: spesa settimanale.”</p>
+                <p class="example">Per un trasferimento: “Trasferimento di 100 euro oggi dall’account Conto corrente all’account Risparmi.”</p>
+            </aside>
+        </section>
+
+        <section class="container review-container">
+            <h1>Trascrizioni da confermare</h1>
+            <p class="subtitle">Controlla i dati estratti, correggi i campi mancanti e conferma per creare la transazione.</p>
+            <p id="reviewStatus" role="status">Caricamento registrazioni...</p>
+            <div id="reviewList"></div>
         </section>
     </main>
 
@@ -121,6 +218,11 @@
         let recordingStartedAt = 0;
         let durationMS = 0;
         let timerInterval;
+
+        const reviewList = document.getElementById('reviewList');
+        const reviewStatus = document.getElementById('reviewStatus');
+        let accounts = [];
+        let categories = [];
 
         function formatDuration(milliseconds) {
             const totalSeconds = Math.floor(milliseconds / 1000);
@@ -263,10 +365,10 @@
                     throw new Error(result.error || 'Impossibile salvare la registrazione.');
                 }
 
-                successMessage.textContent = `Registrazione salvata con successo (ID: ${result.id}).`;
+                successMessage.textContent = `Registrazione trascritta e salvata con successo (ID: ${result.id}).`;
                 successMessage.style.display = 'block';
                 discardRecording();
-                recordingStatus.textContent = 'Registrazione salvata. Puoi registrarne una nuova.';
+                recordingStatus.textContent = 'Registrazione trascritta e salvata. Puoi registrarne una nuova.';
             } catch (error) {
                 errorMessage.textContent = error.message || 'Errore durante il salvataggio della registrazione.';
                 errorMessage.style.display = 'block';
@@ -275,6 +377,223 @@
                 deleteButton.disabled = false;
             }
         });
+
+        function createOption(value, label = value) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            return option;
+        }
+
+        async function loadReviewOptions() {
+            const [accountResponse, categoryResponse] = await Promise.all([
+                fetch('/api/v1/accounts'),
+                fetch('/api/v1/categories')
+            ]);
+            if (!accountResponse.ok || !categoryResponse.ok) {
+                throw new Error('Impossibile caricare account e categorie.');
+            }
+            accounts = await accountResponse.json();
+            categories = await categoryResponse.json();
+        }
+
+        function createField(labelText, name, type = 'text', options = {}) {
+            const group = document.createElement('div');
+            group.className = `form-group${options.fullWidth ? ' full-width' : ''}`;
+            const label = document.createElement('label');
+            label.textContent = labelText;
+            label.htmlFor = `${name}-${crypto.randomUUID()}`;
+            let input;
+            if (type === 'select') {
+                input = document.createElement('select');
+                input.appendChild(createOption('', '-- Seleziona --'));
+                (options.values || []).forEach(value => input.appendChild(createOption(value, options.labels?.[value] || value)));
+            } else if (type === 'textarea') {
+                input = document.createElement('textarea');
+            } else {
+                input = document.createElement('input');
+                input.type = type;
+            }
+            input.id = label.htmlFor;
+            input.name = name;
+            input.required = Boolean(options.required);
+            if (options.step) input.step = options.step;
+            if (options.min) input.min = options.min;
+            if (options.list) {
+                const datalist = document.createElement('datalist');
+                datalist.id = `${input.id}-options`;
+                options.list.forEach(value => datalist.appendChild(createOption(value)));
+                input.setAttribute('list', datalist.id);
+                group.append(label, input, datalist);
+            } else {
+                group.append(label, input);
+            }
+            return { group, input };
+        }
+
+        function renderReviewCard(recording) {
+            const card = document.createElement('article');
+            card.className = 'review-card';
+            card.dataset.id = recording.id;
+
+            const title = document.createElement('h2');
+            title.textContent = `Registrazione #${recording.id}`;
+            const transcriptLabel = document.createElement('strong');
+            transcriptLabel.textContent = 'Trascrizione';
+            const transcript = document.createElement('p');
+            transcript.className = 'transcription-text';
+            transcript.textContent = recording.transcription;
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.preload = 'none';
+            audio.src = `/forms/recordings/${recording.id}/audio`;
+            const extractButton = document.createElement('button');
+            extractButton.type = 'button';
+            extractButton.className = 'btn-submit';
+            extractButton.textContent = 'Estrai i dati con Ollama';
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'btn-delete';
+            deleteButton.textContent = 'Elimina trascrizione';
+            const form = document.createElement('form');
+            form.hidden = true;
+            const fieldGrid = document.createElement('div');
+            fieldGrid.className = 'field-grid';
+
+            const accountNames = accounts.map(account => account.name);
+            const categoryOptions = categories.map(category => category.name);
+            const accountField = createField('Account *', 'accountName', 'text', { required: true, list: accountNames });
+            const typeField = createField('Tipo operazione *', 'categoryType', 'select', {
+                required: true,
+                values: ['EXPENSE', 'INCOME', 'TRANSFER'],
+                labels: { EXPENSE: 'Spesa', INCOME: 'Entrata', TRANSFER: 'Trasferimento' }
+            });
+            const categoryField = createField('Categoria *', 'categoryName', 'text', { required: true, list: categoryOptions });
+            const targetField = createField('Account di destinazione *', 'accountTo', 'text', { required: true, list: accountNames });
+            const amountField = createField('Importo (€) *', 'amount', 'number', { required: true, min: '0.01', step: '0.01' });
+            const dateField = createField('Data *', 'occurredAt', 'date', { required: true });
+            const descriptionField = createField('Descrizione', 'description', 'textarea', { fullWidth: true });
+            fieldGrid.append(accountField.group, typeField.group, categoryField.group, targetField.group, amountField.group, dateField.group, descriptionField.group);
+            const missing = document.createElement('p');
+            missing.setAttribute('role', 'status');
+            const error = document.createElement('p');
+            error.className = 'review-error';
+            error.setAttribute('role', 'alert');
+            const submit = document.createElement('button');
+            submit.type = 'submit';
+            submit.className = 'btn-submit';
+            submit.textContent = 'Conferma e crea transazione';
+            form.append(fieldGrid, missing, error, submit);
+            card.append(title, transcriptLabel, transcript, audio, extractButton, deleteButton, form);
+            reviewList.appendChild(card);
+
+            function updateFields() {
+                const isTransfer = typeField.input.value === 'TRANSFER';
+                categoryField.group.hidden = isTransfer;
+                targetField.group.hidden = !isTransfer;
+                categoryField.input.required = !isTransfer;
+                targetField.input.required = isTransfer;
+            }
+            typeField.input.addEventListener('change', updateFields);
+            updateFields();
+
+            extractButton.addEventListener('click', async () => {
+                extractButton.disabled = true;
+                extractButton.textContent = 'Estrazione in corso...';
+                error.textContent = '';
+                try {
+                    const response = await fetch(`/forms/recordings/${recording.id}/extract`, { method: 'POST' });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Estrazione non riuscita.');
+                    accountField.input.value = result.accountName || '';
+                    targetField.input.value = result.accountTo || '';
+                    typeField.input.value = result.categoryType || '';
+                    categoryField.input.value = result.categoryName || '';
+                    amountField.input.value = result.amount ?? '';
+                    dateField.input.value = result.occurredAt || '';
+                    descriptionField.input.value = result.description || '';
+                    updateFields();
+                    const missingFields = [];
+                    if (!accountField.input.value) missingFields.push('account');
+                    if (!typeField.input.value) missingFields.push('tipo operazione');
+                    if (typeField.input.value === 'TRANSFER' && !targetField.input.value) missingFields.push('account di destinazione');
+                    if (typeField.input.value !== 'TRANSFER' && !categoryField.input.value) missingFields.push('categoria');
+                    if (!amountField.input.value) missingFields.push('importo');
+                    if (!dateField.input.value) missingFields.push('data');
+                    missing.textContent = missingFields.length
+                        ? `Da completare o verificare: ${missingFields.join(', ')}.`
+                        : 'Verifica i dati estratti prima di confermare.';
+                    form.hidden = false;
+                } catch (err) {
+                    error.textContent = err.message || 'Errore durante l’estrazione.';
+                } finally {
+                    extractButton.disabled = false;
+                    extractButton.textContent = 'Riprova estrazione con Ollama';
+                }
+            });
+
+            deleteButton.addEventListener('click', async () => {
+                if (!window.confirm('Eliminare definitivamente questa trascrizione e la registrazione audio associata?')) {
+                    return;
+                }
+                deleteButton.disabled = true;
+                try {
+                    const response = await fetch(`/forms/recordings/${recording.id}`, { method: 'DELETE' });
+                    const result = response.status === 204 ? {} : await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Impossibile eliminare la trascrizione.');
+                    card.remove();
+                    reviewStatus.textContent = reviewList.children.length
+                        ? 'Trascrizione eliminata.'
+                        : 'Non ci sono trascrizioni da confermare.';
+                } catch (err) {
+                    error.textContent = err.message || 'Errore durante l’eliminazione.';
+                    deleteButton.disabled = false;
+                }
+            });
+
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                submit.disabled = true;
+                error.textContent = '';
+                const payload = Object.fromEntries(new FormData(form).entries());
+                payload.amount = payload.amount ? Number(payload.amount) : null;
+                try {
+                    const response = await fetch(`/forms/recordings/${recording.id}/confirm`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Impossibile creare la transazione.');
+                    card.remove();
+                    reviewStatus.textContent = `Transazione creata (ID: ${result.transactionId}).`;
+                    if (!reviewList.children.length) reviewStatus.textContent = 'Non ci sono trascrizioni da confermare.';
+                } catch (err) {
+                    error.textContent = err.message || 'Errore durante la conferma.';
+                    submit.disabled = false;
+                }
+            });
+        }
+
+        async function loadReviewableRecordings() {
+            try {
+                await loadReviewOptions();
+                const response = await fetch('/forms/recordings/reviewable');
+                if (!response.ok) throw new Error('Impossibile caricare le registrazioni da confermare.');
+                const recordings = await response.json();
+                reviewList.replaceChildren();
+                if (!recordings.length) {
+                    reviewStatus.textContent = 'Non ci sono trascrizioni da confermare.';
+                    return;
+                }
+                reviewStatus.textContent = `${recordings.length} trascrizioni da confermare.`;
+                recordings.forEach(renderReviewCard);
+            } catch (error) {
+                reviewStatus.textContent = error.message || 'Errore nel caricamento delle trascrizioni.';
+            }
+        }
+
+        loadReviewableRecordings();
     </script>
 </body>
 </html>

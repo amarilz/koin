@@ -6,10 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-
-	"koin/internal/repository"
 )
 
 func TestVoiceTranscriptionClientSendsAudioAndReadsTranscript(t *testing.T) {
@@ -59,35 +56,6 @@ func TestVoiceTranscriptionClientSendsAudioAndReadsTranscript(t *testing.T) {
 	}
 }
 
-func TestVoiceTranscriptionServiceSavesPendingRecordings(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"text":"trascritto"}`)
-	}))
-	defer server.Close()
-
-	client, err := NewVoiceTranscriptionClient(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	recordings := &transcriptionRepositoryStub{
-		recordings: []repository.PendingVoiceRecording{
-			{ID: 1, AudioData: []byte("first"), MimeType: "audio/webm"},
-			{ID: 2, AudioData: []byte("second"), MimeType: "audio/mp4"},
-		},
-	}
-	service := NewVoiceTranscriptionService(recordings, client)
-	service.transcribePending(context.Background())
-
-	if len(recordings.transcriptions) != 2 {
-		t.Fatalf("expected 2 saved transcriptions, got %d", len(recordings.transcriptions))
-	}
-	for _, transcript := range recordings.transcriptions {
-		if transcript != "trascritto" {
-			t.Errorf("unexpected transcription %q", transcript)
-		}
-	}
-}
-
 func TestAudioFileExtension(t *testing.T) {
 	for mimeType, expected := range map[string]string{
 		"audio/webm;codecs=opus": ".webm",
@@ -98,26 +66,4 @@ func TestAudioFileExtension(t *testing.T) {
 			t.Errorf("audioFileExtension(%q) = %q, want %q", mimeType, got, expected)
 		}
 	}
-}
-
-type transcriptionRepositoryStub struct {
-	recordings     []repository.PendingVoiceRecording
-	transcriptions map[int64]string
-}
-
-func (repo *transcriptionRepositoryStub) GetNextUntranscribedVoiceRecording(_ context.Context, afterID int64) (*repository.PendingVoiceRecording, error) {
-	for i := range repo.recordings {
-		if repo.recordings[i].ID > afterID {
-			return &repo.recordings[i], nil
-		}
-	}
-	return nil, nil
-}
-
-func (repo *transcriptionRepositoryStub) SaveVoiceRecordingTranscription(_ context.Context, id int64, transcription string) error {
-	if repo.transcriptions == nil {
-		repo.transcriptions = make(map[int64]string)
-	}
-	repo.transcriptions[id] = strings.TrimSpace(transcription)
-	return nil
 }
