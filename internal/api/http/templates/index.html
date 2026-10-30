@@ -239,6 +239,17 @@
                 <section class="panel" style="grid-column: 1 / -1;">
                     <div class="panel-header">
                         <div>
+                            <div class="panel-title">Guadagno netto mese per mese</div>
+                            <div class="panel-subtitle">Entrate - uscite · ultimi 12 mesi · esclusa la categoria Prestito</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper" style="width:100%; height:260px;">
+                        <canvas id="monthlyNetChart" style="width:100%; height:100%; display:block;"></canvas>
+                    </div>
+                </section>
+                <section class="panel" style="grid-column: 1 / -1;">
+                    <div class="panel-header">
+                        <div>
                             <div class="panel-title">Andamento complessivo</div>
                             <div class="panel-subtitle">Visualizzazione basata sui filtri</div>
                         </div>
@@ -503,12 +514,13 @@
             try {
                 const response = await fetch('/api/v1/transactions?limit=1000');
                 const data = await response.json();
-                if (!Array.isArray(data) || data.length === 0) {
+                if (!Array.isArray(data)) {
                     listEl.innerHTML = '<div class="empty-state">Nessuna transazione trovata</div>';
                     return;
                 }
 
                 cachedTransactions = data;
+                drawMonthlyNet();
                 const categories = Array.from(new Set(
                     cachedTransactions.map((tx) => tx.categoryName || tx.categoryType || 'Trasferimento')
                 ));
@@ -521,6 +533,111 @@
         }
 
         let _trendChart = null;
+        let _monthlyNetChart = null;
+
+        function drawMonthlyNet() {
+            const canvas = document.getElementById('monthlyNetChart');
+            if (!canvas) return;
+
+            const now = new Date();
+            const firstMonth = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+            const months = Array.from({ length: 12 }, (_, index) =>
+                new Date(firstMonth.getFullYear(), firstMonth.getMonth() + index, 1)
+            );
+            const monthlyTotals = new Map(months.map((month) => [
+                `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
+                0
+            ]));
+
+            cachedTransactions.forEach((transaction) => {
+                if (!transaction.occurredAt || (transaction.categoryName || '').trim().toLowerCase() === 'prestito') {
+                    return;
+                }
+
+                const monthKey = transaction.occurredAt.slice(0, 7);
+                if (monthlyTotals.has(monthKey)) {
+                    monthlyTotals.set(monthKey, monthlyTotals.get(monthKey) + (transaction.amount || 0));
+                }
+            });
+
+            const totals = months.map((month) =>
+                monthlyTotals.get(`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`) / 100
+            );
+            const movingAverage = totals.map((_, index) =>
+                index < 5
+                    ? null
+                    : totals.slice(index - 5, index + 1).reduce((sum, amount) => sum + amount, 0) / 6
+            );
+            const labels = months.map((month) =>
+                month.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })
+            );
+
+            if (!_monthlyNetChart) {
+                _monthlyNetChart = new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Guadagno netto (€)',
+                                data: totals,
+                                backgroundColor: totals.map((amount) =>
+                                    amount < 0 ? 'rgba(211, 47, 47, 0.75)' : 'rgba(46, 125, 50, 0.75)'
+                                ),
+                                borderColor: totals.map((amount) =>
+                                    amount < 0 ? '#d32f2f' : '#2e7d32'
+                                ),
+                                borderWidth: 1,
+                            },
+                            {
+                                type: 'line',
+                                label: 'Media mobile a 6 mesi (€)',
+                                data: movingAverage,
+                                borderColor: '#667eea',
+                                borderDash: [6, 4],
+                                borderWidth: 2,
+                                pointRadius: 2,
+                                tension: 0.25,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => `${context.dataset.label}: ${formatAmount(Math.round(context.parsed.y * 100))}`,
+                                },
+                            },
+                            legend: { position: 'bottom' },
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: (value) => `${value} €`,
+                                },
+                            },
+                        },
+                    },
+                });
+            } else {
+                _monthlyNetChart.data.labels = labels;
+                _monthlyNetChart.data.datasets[0].data = totals;
+                _monthlyNetChart.data.datasets[0].backgroundColor = totals.map((amount) =>
+                    amount < 0 ? 'rgba(211, 47, 47, 0.75)' : 'rgba(46, 125, 50, 0.75)'
+                );
+                _monthlyNetChart.data.datasets[0].borderColor = totals.map((amount) =>
+                    amount < 0 ? '#d32f2f' : '#2e7d32'
+                );
+                _monthlyNetChart.data.datasets[1].data = movingAverage;
+                _monthlyNetChart.update();
+            }
+        }
 
         function drawTrend() {
             const canvas = document.getElementById('trendChart');
