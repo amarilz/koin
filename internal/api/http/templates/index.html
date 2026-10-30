@@ -174,6 +174,49 @@
             border: 1px dashed #ddd;
         }
 
+        .expense-matrix-wrapper {
+            overflow-x: auto;
+        }
+
+        .expense-matrix {
+            width: 100%;
+            min-width: 1120px;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 12px;
+        }
+
+        .expense-matrix th,
+        .expense-matrix td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .expense-matrix thead th {
+            color: #666;
+            font-weight: 600;
+        }
+
+        .expense-matrix th:first-child {
+            position: sticky;
+            left: 0;
+            min-width: 140px;
+            text-align: left;
+            background: white;
+        }
+
+        .expense-matrix tbody th {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .expense-matrix tbody tr:hover td,
+        .expense-matrix tbody tr:hover th {
+            background: #f8f9ff;
+        }
+
         .hero {
             text-align: center;
             padding: 40px 20px;
@@ -245,6 +288,17 @@
                     </div>
                     <div class="chart-wrapper" style="width:100%; height:260px;">
                         <canvas id="monthlyNetChart" style="width:100%; height:100%; display:block;"></canvas>
+                    </div>
+                </section>
+                <section class="panel" style="grid-column: 1 / -1;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Spese per categoria</div>
+                            <div class="panel-subtitle">Importi mensili negli ultimi 12 mesi · esclusa la categoria Prestito · ordinate per media mensile</div>
+                        </div>
+                    </div>
+                    <div class="expense-matrix-wrapper" id="monthlyExpensesMatrix">
+                        <div class="empty-state">Caricamento spese...</div>
                     </div>
                 </section>
                 <section class="panel" style="grid-column: 1 / -1;">
@@ -521,6 +575,7 @@
 
                 cachedTransactions = data;
                 drawMonthlyNet();
+                drawMonthlyExpenses();
                 const categories = Array.from(new Set(
                     cachedTransactions.map((tx) => tx.categoryName || tx.categoryType || 'Trasferimento')
                 ));
@@ -534,6 +589,97 @@
 
         let _trendChart = null;
         let _monthlyNetChart = null;
+
+        function drawMonthlyExpenses() {
+            const matrixEl = document.getElementById('monthlyExpensesMatrix');
+            if (!matrixEl) return;
+
+            const now = new Date();
+            const firstMonth = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+            const months = Array.from({ length: 12 }, (_, index) =>
+                new Date(firstMonth.getFullYear(), firstMonth.getMonth() + index, 1)
+            );
+            const monthKeys = months.map((month) =>
+                `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`
+            );
+            const monthlyExpenses = new Map();
+
+            cachedTransactions.forEach((transaction) => {
+                const category = (transaction.categoryName || '').trim();
+                if (
+                    transaction.categoryType !== 'EXPENSE' ||
+                    !category ||
+                    category.toLowerCase() === 'prestito' ||
+                    !transaction.occurredAt
+                ) {
+                    return;
+                }
+
+                const monthIndex = monthKeys.indexOf(transaction.occurredAt.slice(0, 7));
+                if (monthIndex === -1) return;
+
+                if (!monthlyExpenses.has(category)) {
+                    monthlyExpenses.set(category, Array(months.length).fill(0));
+                }
+                monthlyExpenses.get(category)[monthIndex] += Math.abs(transaction.amount || 0) / 100;
+            });
+
+            const labels = months.map((month) =>
+                month.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })
+            );
+            const categories = Array.from(monthlyExpenses, ([name, amounts]) => ({
+                name,
+                amounts,
+                average: amounts.reduce((sum, amount) => sum + amount, 0) / months.length,
+            })).sort((first, second) =>
+                second.average - first.average || first.name.localeCompare(second.name, 'it')
+            );
+
+            if (categories.length === 0) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.textContent = 'Nessuna spesa trovata negli ultimi 12 mesi';
+                matrixEl.replaceChildren(emptyState);
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.className = 'expense-matrix';
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            const categoryHeader = document.createElement('th');
+            categoryHeader.scope = 'col';
+            categoryHeader.textContent = 'Categoria';
+            headerRow.appendChild(categoryHeader);
+            const averageHeader = document.createElement('th');
+            averageHeader.scope = 'col';
+            averageHeader.textContent = 'Media mensile';
+            headerRow.appendChild(averageHeader);
+            labels.forEach((label) => {
+                const monthHeader = document.createElement('th');
+                monthHeader.scope = 'col';
+                monthHeader.textContent = label;
+                headerRow.appendChild(monthHeader);
+            });
+
+            const tbody = table.createTBody();
+            categories.forEach(({ name, amounts, average }) => {
+                const row = tbody.insertRow();
+                const categoryCell = document.createElement('th');
+                categoryCell.scope = 'row';
+                categoryCell.textContent = name;
+                row.appendChild(categoryCell);
+
+                const averageCell = row.insertCell();
+                averageCell.textContent = formatAmount(Math.round(average * 100));
+
+                amounts.forEach((amount) => {
+                    const cell = row.insertCell();
+                    cell.textContent = formatAmount(Math.round(amount * 100));
+                });
+            });
+            matrixEl.replaceChildren(table);
+        }
 
         function drawMonthlyNet() {
             const canvas = document.getElementById('monthlyNetChart');
