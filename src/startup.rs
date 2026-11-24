@@ -61,6 +61,7 @@ impl OllamaLogs {
 #[derive(Default)]
 pub struct AudioProcesses {
     ollama: Option<Child>,
+    whisper: Option<WhisperContainer>,
     pub logs: OllamaLogs,
 }
 
@@ -73,18 +74,38 @@ impl Drop for AudioProcesses {
     }
 }
 
-pub fn start_default_services(console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
-    if whisper_url() == LOCAL_WHISPER_URL {
-        console.startup_status("Starting Whisper with Docker…")?;
-        match start_whisper() {
-            Ok(()) => console.line("Whisper started.")?,
-            Err(error) => console.line(format_args!("Could not start Whisper: {error:#}"))?,
-        }
+struct WhisperContainer(String);
+
+impl Drop for WhisperContainer {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["container", "rm", "--force", &self.0])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
     }
-    Ok(())
 }
 
 impl AudioProcesses {
+    pub fn start_default_services(
+        &mut self,
+        console: &mut Console<impl BufRead, impl Write>,
+    ) -> Flow<()> {
+        if whisper_url() == LOCAL_WHISPER_URL {
+            console.startup_status("Starting Whisper with Docker…")?;
+            match start_whisper() {
+                Ok(Some(container)) => {
+                    self.whisper = Some(container);
+                    console.line("Whisper started.")?;
+                }
+                Ok(None) => console.line("Whisper is already running.")?,
+                Err(error) => console.line(format_args!("Could not start Whisper: {error:#}"))?,
+            }
+        }
+        Ok(())
+    }
+
     pub fn offer_ollama(&mut self, console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
         let base = ollama_url();
         if ollama_bind(&base).is_none() {
@@ -138,7 +159,7 @@ fn docker_ready() -> bool {
         .is_ok_and(|status| status.success())
 }
 
-fn start_whisper() -> Result<()> {
+fn start_whisper() -> Result<Option<WhisperContainer>> {
     let status = Command::new("docker")
         .args(["compose", "version"])
         .stdout(Stdio::null())
@@ -150,6 +171,9 @@ fn start_whisper() -> Result<()> {
     }
     if !docker_ready() {
         start_docker()?;
+    }
+    if running_whisper()?.is_some() {
+        return Ok(None);
     }
     let mut child = Command::new("docker")
         .args([
@@ -175,13 +199,46 @@ fn start_whisper() -> Result<()> {
         .context("Could not write to Docker Compose")?
         .write_all(COMPOSE.as_bytes());
     let output = child.wait_with_output()?;
+    let started = running_whisper()?.map(WhisperContainer);
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let detail = stderr.lines().last().unwrap_or("unknown error").trim();
         bail!("{detail}");
     }
     write?;
-    Ok(())
+    Ok(Some(started.context("Whisper's container did not start")?))
+}
+
+fn running_whisper() -> Result<Option<String>> {
+    let output = Command::new("docker")
+        .args([
+            "container",
+            "ls",
+            "--no-trunc",
+            "--filter",
+            "label=com.docker.compose.project=koin",
+            "--filter",
+            "label=com.docker.compose.service=whisper",
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.ID}}",
+        ])
+        .output()
+        .context("Could not look up the Whisper container")?;
+    if !output.status.success() {
+        bail!(
+            "Could not look up the Whisper container: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let ids = String::from_utf8(output.stdout).context("Invalid Whisper container ID")?;
+    let mut ids = ids.lines();
+    let id = ids.next().map(str::to_owned);
+    if ids.next().is_some() {
+        bail!("More than one Whisper container is running");
+    }
+    Ok(id)
 }
 
 fn start_docker() -> Result<()> {

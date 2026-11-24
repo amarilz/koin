@@ -34,8 +34,8 @@ or **Process pending recordings** to retry processing after an error.
 At interactive startup, Koin starts Whisper with Docker Compose and asks
 whether to start Ollama if the configured local endpoint is unavailable. The
 default answer is **No**. You can start it later with **Audio → Start Ollama**.
-Koin stops the process it started when the CLI exits. Whisper remains running
-in Docker.
+On exit, Koin terminates the Ollama process and forcibly removes the Whisper
+container it started. Services that were already running remain active.
 Receiver-only mode uses existing audio services.
 
 The Whisper image must be available locally. By default, Compose mounts

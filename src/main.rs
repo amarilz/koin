@@ -88,7 +88,8 @@ fn run() -> Result<()> {
     let receiver = upload::start_cli(&database, interactive)?;
     let mut audio_processes = startup::AudioProcesses::default();
     if interactive {
-        match startup::start_default_services(&mut console)
+        match audio_processes
+            .start_default_services(&mut console)
             .and_then(|()| audio_processes.offer_ollama(&mut console))
         {
             Ok(()) => {}
