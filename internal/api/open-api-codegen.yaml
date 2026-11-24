@@ -1,8 +1,0 @@
-package: generated
-# percorso in cui salvare il file generato
-output: internal/api/generated/api.gen.go
-generate:
-  models: true
-  gin-server: true
-  embedded-spec: true
-  strict-server: true

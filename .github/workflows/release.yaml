@@ -39,6 +39,12 @@ jobs:
             exit 1
           fi
 
+          CARGO_VERSION="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "koin") | .version')"
+          if [[ "$VERSION" != "$CARGO_VERSION" ]]; then
+            echo "VERSION ($VERSION) and Cargo.toml ($CARGO_VERSION) differ." >&2
+            exit 1
+          fi
+
           TAG="v$VERSION"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists. Skipping release."

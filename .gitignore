@@ -8,21 +8,6 @@ out/
 *.so
 *.dylib
 
-# go workspace file
-go.work
-go.work.sum
-
-# test binary, built with `go test -c`
-*.test
-
-# code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
-coverage.txt
-coverage.html
-
 # eitor/IDE
 # .idea/
 # .vscode/
@@ -36,6 +21,5 @@ coverage.html
 .env
 .env.*.local
 
-# generated code
-**/api/generated/*.go
-**/db/generated/*.go
+# Rust build output
+/target/
