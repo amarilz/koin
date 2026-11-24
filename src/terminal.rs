@@ -233,19 +233,22 @@ pub fn run(
         let outcome = match choice {
             0 => manage_collection(
                 console,
-                &store,
+                &mut store,
                 ACTIONS[choice],
-                "Create account",
+                &["Create account", "Set current balance"],
                 account_overview,
-                create_account,
+                |console, store, action| match action {
+                    0 => create_account(console, store),
+                    _ => reconcile_account(console, store),
+                },
             ),
             1 => manage_collection(
                 console,
-                &store,
+                &mut store,
                 ACTIONS[choice],
-                "Create category",
+                &["Create category"],
                 category_overview,
-                create_category,
+                |console, store, _| create_category(console, store),
             ),
             2 => register_movement(console, &mut store),
             3 => transfer(console, &mut store),
@@ -273,21 +276,22 @@ pub fn run(
 
 fn manage_collection<R: BufRead, W: Write>(
     console: &mut Console<R, W>,
-    store: &Store,
+    store: &mut Store,
     title: &str,
-    action: &str,
+    actions: &[&str],
     overview: impl Fn(&Store) -> Result<Vec<String>>,
-    create: impl Fn(&mut Console<R, W>, &Store) -> Flow<()>,
+    perform: impl Fn(&mut Console<R, W>, &mut Store, usize) -> Flow<()>,
 ) -> Flow<()> {
     let mut selected = 0;
     loop {
         console.section(title);
         let rows = overview(store)?;
-        if console.menu_with_overview(title, &[action], &mut selected, &rows)? != 0 {
+        let choice = console.menu_with_overview(title, actions, &mut selected, &rows)?;
+        let Some(action) = actions.get(choice) else {
             return Ok(());
-        }
+        };
         console.section(action);
-        match create(console, store) {
+        match perform(console, store, choice) {
             Ok(()) | Err(FlowError::Cancel) => {}
             Err(FlowError::Exit) => return Err(FlowError::Exit),
             Err(FlowError::Failure(error)) => console.line(format_args!("Error: {error:#}"))?,
@@ -364,6 +368,38 @@ fn create_account(console: &mut Console<impl BufRead, impl Write>, store: &Store
     )?;
     store.create_account(&name, &currency, initial_balance)?;
     console.line("Account created.")?;
+    Ok(())
+}
+
+fn reconcile_account(
+    console: &mut Console<impl BufRead, impl Write>,
+    store: &mut Store,
+) -> Flow<()> {
+    let accounts = store.accounts()?;
+    if accounts.is_empty() {
+        console.line("Create an account before setting its balance.")?;
+        return Ok(());
+    }
+    let account = select_account(
+        console,
+        "Account to reconcile",
+        &accounts.iter().collect::<Vec<_>>(),
+    )?;
+    let amount = console.field(
+        format_args!(
+            "Actual balance in {} (recorded: {})",
+            account.currency,
+            format_cents(account.balance)
+        ),
+        parse_cents,
+        "Enter an amount with at most two decimal places.",
+    )?;
+    store.reconcile_account_balance(account.id, amount)?;
+    console.line(format_args!(
+        "Balance set to {} {}.",
+        format_cents(amount),
+        account.currency
+    ))?;
     Ok(())
 }
 
