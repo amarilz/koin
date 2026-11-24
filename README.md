@@ -3,7 +3,7 @@
 ## Run locally
 
 Build with Rust and Cargo. On Linux, install the ALSA development headers.
-For a release binary, run `make build` or `cargo build --locked --release`.
+For a release binary, run `cargo build --locked --release`.
 Use `cargo run --locked -- --version` to check the application version.
 
 Run `cargo run --locked` from the repository. At first launch, choose whether
@@ -79,11 +79,4 @@ The audio workflow starts with `Store::add_recording`. Pass a Whisper
 transcription endpoint, an Ollama base URL, and a model name to the respective
 clients, then call `Store::process_pending`. Review the saved proposal and pass
 the corrected values to `Store::confirm_recording`, or use
-`Store::discard_recording`. ### Import a PostgreSQL backup
-
-With Docker running and the `postgres:18` image available locally, run
-`python3 scripts/import_postgres_backup.py BACKUP.dump NEW_DB.sqlite3`.
-The importer restores the archive in an isolated PostgreSQL container,
-compares all imported rows and per-account balances, checks SQLite integrity,
-and publishes the verified database at a new path. Open it in Koin with
-`--database NEW_DB.sqlite3` to inspect it.
+`Store::discard_recording`.
