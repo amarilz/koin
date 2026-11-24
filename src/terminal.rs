@@ -4,6 +4,7 @@ mod microphone;
 mod reports;
 mod screen;
 
+use crate::startup::AudioProcesses;
 use anyhow::Result;
 use chrono::{Local, NaiveDate};
 use koin::{Account, CategoryType, Movement, Store, Transfer};
@@ -171,6 +172,14 @@ impl<R: BufRead, W: Write> Console<R, W> {
         Ok(choice)
     }
 
+    pub fn startup_status(&mut self, message: &str) -> io::Result<()> {
+        if let Some(screen) = &mut self.screen {
+            screen.activity("Avvio di Koin", message, "")
+        } else {
+            self.line(message)
+        }
+    }
+
     pub fn section(&mut self, title: &str) {
         if let Some(screen) = &mut self.screen {
             screen.title = title.to_owned();
@@ -185,7 +194,11 @@ impl<R: BufRead, W: Write> Console<R, W> {
     }
 }
 
-pub fn run(console: &mut Console<impl BufRead, impl Write>, mut store: Store) -> Result<()> {
+pub fn run(
+    console: &mut Console<impl BufRead, impl Write>,
+    mut store: Store,
+    audio_processes: &mut AudioProcesses,
+) -> Result<()> {
     const ACTIONS: [&str; 7] = [
         "Conti e saldi",
         "Categorie",
@@ -227,7 +240,7 @@ pub fn run(console: &mut Console<impl BufRead, impl Write>, mut store: Store) ->
             2 => register_movement(console, &mut store),
             3 => transfer(console, &mut store),
             4 => history::run(console, &store),
-            5 => audio::run(console, &mut store),
+            5 => audio::run(console, &mut store, audio_processes),
             6 => reports::run(console, &store),
             _ => unreachable!(),
         };

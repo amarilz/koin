@@ -31,6 +31,18 @@ Koin runs Whisper and then Ollama. Review or edit the proposed movement before
 saving it to the ledger. Use **Rivedi registrazioni** to reopen a transcription
 or **Elabora registrazioni in attesa** to retry processing after an error.
 
+At interactive startup, Koin starts Whisper with Docker Compose and asks
+whether to start Ollama if the configured local endpoint is unavailable. The
+default answer is **No**. You can start it later with **Audio → Avvia Ollama**.
+Koin stops the process it started when the CLI exits. Whisper remains running
+in Docker.
+Receiver-only mode uses existing audio services.
+
+The Whisper image must be available locally. By default, Compose mounts
+`~/.cache/whisper` as the model directory. Set `WHISPER_MODELS_DIR` to use a
+different directory. If Whisper is configured with a different URL, Koin uses that endpoint
+directly. Koin can launch Ollama for a local HTTP endpoint.
+
 The CLI reads the following environment variables.
 
 | Variable | Default |

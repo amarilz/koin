@@ -1,4 +1,5 @@
 mod audio_services;
+mod startup;
 mod terminal;
 mod upload;
 
@@ -87,6 +88,16 @@ fn run() -> Result<()> {
         }
     };
     let receiver = upload::start_cli(&database, interactive)?;
+    let mut audio_processes = startup::AudioProcesses::default();
+    if interactive {
+        match startup::start_default_services(&mut console)
+            .and_then(|()| audio_processes.offer_ollama(&mut console))
+        {
+            Ok(()) => {}
+            Err(FlowError::Exit | FlowError::Cancel) => return Ok(()),
+            Err(FlowError::Failure(error)) => return Err(error),
+        }
+    }
     if interactive {
         console.line(format_args!(
             "Ricevitore Android attivo sulla porta {}.",
@@ -98,7 +109,7 @@ fn run() -> Result<()> {
             receiver.address
         ))?;
     }
-    terminal::run(&mut console, store)
+    terminal::run(&mut console, store, &mut audio_processes)
 }
 
 fn settings_path() -> Result<PathBuf> {

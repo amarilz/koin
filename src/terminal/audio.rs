@@ -1,5 +1,8 @@
 use super::{Console, Flow, FlowError, format_cents, parse_cents};
-use crate::audio_services::{ollama, whisper};
+use crate::{
+    audio_services::{ollama, whisper},
+    startup::AudioProcesses,
+};
 use anyhow::Context;
 use chrono::{DateTime, Local, NaiveDate};
 use koin::{
@@ -8,11 +11,16 @@ use koin::{
 };
 use std::io::{BufRead, Write};
 
-pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &mut Store) -> Flow<()> {
+pub(super) fn run(
+    console: &mut Console<impl BufRead, impl Write>,
+    store: &mut Store,
+    audio_processes: &mut AudioProcesses,
+) -> Flow<()> {
     let entries = [
         "Registra dal microfono",
         "Rivedi registrazioni",
         "Elabora registrazioni in attesa",
+        "Avvia Ollama",
     ];
     let mut selected = 0;
     loop {
@@ -21,6 +29,7 @@ pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &mut S
             0 => record(console, store),
             1 => review_recordings(console, store),
             2 => process_pending(console, store),
+            3 => audio_processes.start_ollama(console),
             _ => return Ok(()),
         };
         match outcome {
