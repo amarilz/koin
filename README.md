@@ -18,22 +18,22 @@ and view balances and recent entries. Press Esc to go back or cancel a form.
 Enter amounts with a comma or a dot as the decimal separator.
 
 With redirected input or output, Koin uses numbered menus that accept typed
-choices. In this mode, type `/annulla` to cancel a form.
+choices. In this mode, type `/cancel` to cancel a form.
 
 ### Record audio
 
-Open **Audio → Registra dal microfono** to start recording from the default
+Open **Audio → Record from microphone** to start recording from the default
 microphone. Press Enter to stop and save, or Esc to discard the recording.
 On macOS, allow microphone access in **System Settings → Privacy & Security**
 if prompted. On Linux, building CPAL requires the ALSA development headers.
 
 Koin runs Whisper and then Ollama. Review or edit the proposed movement before
-saving it to the ledger. Use **Rivedi registrazioni** to reopen a transcription
-or **Elabora registrazioni in attesa** to retry processing after an error.
+saving it to the ledger. Use **Review recordings** to reopen a transcription
+or **Process pending recordings** to retry processing after an error.
 
 At interactive startup, Koin starts Whisper with Docker Compose and asks
 whether to start Ollama if the configured local endpoint is unavailable. The
-default answer is **No**. You can start it later with **Audio → Avvia Ollama**.
+default answer is **No**. You can start it later with **Audio → Start Ollama**.
 Koin stops the process it started when the CLI exits. Whisper remains running
 in Docker.
 Receiver-only mode uses existing audio services.
@@ -65,7 +65,7 @@ and `{"status":"ok"}` while the receiver is running.
 
 Send a POST multipart form with an `audio` file (an `audio/*` media type,
 up to 25 MiB) and a nonnegative integer `durationMs`. A committed upload
-returns HTTP 201 and `{"id":123}`. Open **Audio → Rivedi registrazioni**
+returns HTTP 201 and `{"id":123}`. Open **Audio → Review recordings**
 in the CLI to review the result.
 
 Clients can send an `Idempotency-Key` header and reuse it for retries of the

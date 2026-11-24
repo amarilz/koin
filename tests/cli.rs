@@ -47,44 +47,45 @@ fn menus_record_income_expenses_and_transfers() -> Result<()> {
             "3\n1\n1\n1\nStipendio\n25.50\n2026-11-21\n\n",
             "4\n1\n1\n20\n2026-11-22\nPrelievo\n",
             "4\n1\n1\n999\n2026-11-22\n\n",
-            "3\n2\n1\n2\nCategoria annullata\n/annulla\n",
+            "3\n2\n1\n2\nCategoria annullata\n/cancel\n",
             "0\n",
         ),
     )?;
-    let main_menu = output.split("\nConti e saldi\n").next().unwrap();
+    let main_menu = output.split("\nAccounts and balances\n").next().unwrap();
     for nested in [
-        "Crea conto",
-        "Crea categoria",
-        "Registra entrata",
-        "Registra uscita",
+        "Create account",
+        "Create category",
+        "Record income",
+        "Record expense",
     ] {
         assert!(!main_menu.contains(nested));
     }
-    assert!(main_menu.contains("3. Registra movimento"));
-    assert!(output.contains("Banca  100,00 EUR"));
+    assert!(main_menu.contains("3. Record transaction"));
+    assert!(output.contains("Banca  100.00 EUR"));
     for message in [
-        "Nessun conto",
-        "Uscita  Alimentari",
-        "al massimo due decimali",
-        "Trasferimento registrato",
-        "Saldo insufficiente",
-        "Operazione annullata",
+        "No accounts",
+        "Expense  Alimentari",
+        "at most two decimal places",
+        "Transfer recorded",
+        "Insufficient balance",
+        "Operation canceled",
     ] {
         assert!(output.contains(message), "Missing {message:?} in {output}");
     }
 
     let restarted = run(koin_with_database(&path), "1\n0\n5\n0\n0\n")?;
     for row in [
-        "Totale  113,15 EUR",
-        "Banca  93,15 EUR",
-        "Contanti  20,00 EUR",
-        "2026-11-22  #3  Contanti  Trasferimento  +20,00 EUR  Prelievo",
-        "2026-11-22  #3  Banca  Trasferimento  -20,00 EUR  Prelievo",
-        "2026-11-21  #2  Banca  Stipendio  +25,50 EUR",
-        "2026-11-20  #1  Banca  Alimentari  -12,35 EUR  Spesa",
+        "Total  113.15 EUR",
+        "Banca  93.15 EUR",
+        "Contanti  20.00 EUR",
+        "2026-11-22  Contanti  Transfer  +20.00 EUR  Prelievo",
+        "2026-11-22  Banca  Transfer  -20.00 EUR  Prelievo",
+        "2026-11-21  Banca  Stipendio  +25.50 EUR",
+        "2026-11-20  Banca  Alimentari  -12.35 EUR  Spesa",
     ] {
         assert!(restarted.contains(row), "Missing {row:?} in {restarted}");
     }
+    assert!(!restarted.contains("#3"));
     let store = Store::open_existing(path)?;
     assert_eq!(store.categories()?.len(), 2);
     assert_eq!(store.recent_entries(20)?.len(), 4);
@@ -111,17 +112,17 @@ fn first_run_remembers_the_database_and_never_replaces_existing_files() -> Resul
         command(),
         "1\nunrelated.sqlite3\n2\nunrelated.sqlite3\n1\nbooks/Koin personale.sqlite3\n1\n1\nBanca\n\n10\n0\n0\n",
     )?;
-    assert_eq!(setup.matches("Impossibile usare").count(), 2);
-    assert!(setup.contains("Conto creato"));
+    assert_eq!(setup.matches("Could not use").count(), 2);
+    assert!(setup.contains("Account created"));
     let restarted = run(command(), "1\n0\n0\n")?;
-    assert!(!restarted.contains("Crea un database"));
-    assert!(restarted.contains("Banca  10,00 EUR"));
+    assert!(!restarted.contains("Create a database"));
+    assert!(restarted.contains("Banca  10.00 EUR"));
     assert_eq!(Store::open_existing(&path)?.accounts()?.len(), 1);
 
     std::fs::rename(&path, path.with_file_name("spostato.sqlite3"))?;
     let recovered = run(command(), "2\nbooks/spostato.sqlite3\n1\n0\n0\n")?;
-    assert!(recovered.contains("Impossibile aprire"));
-    assert!(recovered.contains("Banca  10,00 EUR"));
+    assert!(recovered.contains("Could not open"));
+    assert!(recovered.contains("Banca  10.00 EUR"));
     assert!(!path.exists());
     Ok(())
 }
@@ -184,8 +185,8 @@ fn audio_review_can_edit_confirm_and_discard() -> Result<()> {
         ),
     )?;
     assert!(output.contains("Ho speso cinque euro per il pranzo."));
-    assert!(output.contains("Movimento registrato"));
-    assert!(output.contains("Registrazione scartata"));
+    assert!(output.contains("Transaction recorded"));
+    assert!(output.contains("Recording discarded"));
     assert!(store.recording_for_review(confirmed).is_err());
     assert!(store.recording_for_review(discarded).is_err());
     assert_eq!(store.account_balance(bank)?, 9_375);
@@ -225,7 +226,7 @@ fn ordinary_cli_starts_the_android_receiver_and_releases_it_on_exit() -> Result<
         output.read_line(&mut line)?;
         let bound: SocketAddr = line
             .trim()
-            .strip_prefix("Caricamento audio in ascolto su http://")
+            .strip_prefix("Audio upload receiver listening on http://")
             .context("CLI did not start the receiver")?
             .parse()?;
         assert!(bound.ip().is_unspecified());
@@ -315,7 +316,7 @@ fn history_menu_filters_and_resets_the_overview() -> Result<()> {
             "0\n0\n",
         ),
     )?;
-    let screens: Vec<_> = output.split("\nStorico movimenti\n").skip(1).collect();
+    let screens: Vec<_> = output.split("\nTransaction history\n").skip(1).collect();
     assert_eq!(screens.len(), 5);
     assert!(screens[0].find("Mercato").unwrap() < screens[0].find("Spesa vecchia").unwrap());
     assert!(!screens[1].contains("Mercato"));
@@ -323,7 +324,7 @@ fn history_menu_filters_and_resets_the_overview() -> Result<()> {
     assert!(!screens[3].contains("Spesa vecchia"));
     assert!(screens[3].contains("Spesa nuova"));
     assert!(screens[4].contains("Mercato") && screens[4].contains("Spesa vecchia"));
-    assert!(!output.contains("0. Esci") && !output.contains("0. Indietro"));
+    assert!(!output.contains("0. Exit") && !output.contains("0. Back"));
     Ok(())
 }
 
@@ -368,7 +369,7 @@ fn history_date_presets_use_rolling_dates_and_can_be_cleared() -> Result<()> {
             "0\n0\n",
         ),
     )?;
-    let views: Vec<_> = output.split("\nStorico movimenti\n").skip(1).collect();
+    let views: Vec<_> = output.split("\nTransaction history\n").skip(1).collect();
     assert_eq!(views.len(), 6);
     assert!(views[1].contains("Sesto giorno") && !views[1].contains("Settimo giorno"));
     assert!(views[2].contains("Settimo giorno") && !views[2].contains("Due mesi"));
@@ -406,13 +407,23 @@ fn report_menu_shows_expense_matrix_and_monthly_net() -> Result<()> {
             description: None,
         })?;
     }
+    let previous_month = Local::now().date_naive() - chrono::Months::new(1);
+    store.add_movement(Movement {
+        account: "Banca",
+        category: "Internet",
+        kind: CategoryType::Expense,
+        date: previous_month,
+        amount: -400,
+        description: None,
+    })?;
     let output = run(koin_with_database(&path), "7\n1\n2\n0\n0\n")?;
-    assert!(output.contains("Categoria | Media mensile"));
-    assert!(output.contains("Casa | 1,00"));
+    assert!(output.contains("Category | Monthly average"));
+    assert!(output.contains("Casa | 1.00"));
     assert!(!output.contains("Prestito |"));
-    assert!(output.contains("Guadagno netto mese per mese"));
-    assert!(output.contains("+11,00"));
-    assert!(!output.contains("Media 6m"));
+    assert!(output.contains("Monthly net income"));
+    assert!(output.contains("+11.00"));
+    assert!(output.contains("12-month net total: +7.00"));
+    assert!(!output.contains("6-month average"));
     assert!(output.contains("████"));
     Ok(())
 }
@@ -427,9 +438,9 @@ fn account_overview_totals_balances_by_currency() -> Result<()> {
     store.create_account("Valuta estera", "USD", 6_000)?;
 
     let output = run(koin_with_database(&path), "1\n0\n0\n")?;
-    assert!(output.contains("Totale  120,00 EUR"));
-    assert!(output.contains("Totale  60,00 USD"));
-    assert!(output.find("Totale  60,00 USD").unwrap() < output.find("Banca  125,00 EUR").unwrap());
+    assert!(output.contains("Total  120.00 EUR"));
+    assert!(output.contains("Total  60.00 USD"));
+    assert!(output.find("Total  60.00 USD").unwrap() < output.find("Banca  125.00 EUR").unwrap());
     Ok(())
 }
 

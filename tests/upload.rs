@@ -62,7 +62,7 @@ impl Server {
         let line = result??;
         let address = line
             .trim()
-            .strip_prefix("Caricamento audio in ascolto su ")
+            .strip_prefix("Audio upload receiver listening on ")
             .context("Server did not start")?;
         server.endpoint = format!("{address}/forms/recordings");
         Ok(server)

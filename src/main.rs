@@ -17,7 +17,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("Errore: {error:#}");
+            eprintln!("Error: {error:#}");
             ExitCode::FAILURE
         }
     }
@@ -34,17 +34,17 @@ fn run() -> Result<()> {
         Some(flag) if flag == "serve-audio" => return upload::run(arguments),
         Some(flag) if flag == "--help" || flag == "-h" => {
             println!(
-                "Uso: koin [--database FILE]\n     koin serve-audio [--database FILE] [--listen IP:PORTA]\n     koin --version\n\nSenza argomenti, usa il database scelto al primo avvio."
+                "Usage: koin [--database FILE]\n     koin serve-audio [--database FILE] [--listen IP:PORT]\n     koin --version\n\nWithout arguments, Koin opens the database selected at first launch."
             );
             return Ok(());
         }
         Some(flag) if flag == "--database" => Some(PathBuf::from(
-            arguments.next().context("Specifica il file SQLite")?,
+            arguments.next().context("Specify the SQLite file")?,
         )),
-        Some(_) => bail!("Argomento sconosciuto. Usa koin --help"),
+        Some(_) => bail!("Unknown argument. Run koin --help"),
     };
     if arguments.next().is_some() {
-        bail!("Troppi argomenti. Usa koin --help");
+        bail!("Too many arguments. Run koin --help");
     }
 
     let interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
@@ -54,7 +54,7 @@ fn run() -> Result<()> {
     }
     let (store, database) = if let Some(path) = explicit_path {
         let store = Store::open_existing(&path)
-            .with_context(|| format!("Impossibile aprire {}", path.display()))?;
+            .with_context(|| format!("Could not open {}", path.display()))?;
         (store, path)
     } else {
         let settings = settings_path()?;
@@ -63,20 +63,18 @@ fn run() -> Result<()> {
                 Ok(path) if path.is_absolute() => match Store::open_existing(&path) {
                     Ok(store) => Some((store, path)),
                     Err(error) => {
-                        console.line(format_args!(
-                            "Impossibile aprire {}: {error:#}",
-                            path.display()
-                        ))?;
+                        console
+                            .line(format_args!("Could not open {}: {error:#}", path.display()))?;
                         None
                     }
                 },
                 _ => {
-                    console.line("Il percorso salvato nelle impostazioni è invalido.")?;
+                    console.line("The saved database path is invalid.")?;
                     None
                 }
             },
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error).context("Impossibile leggere le impostazioni"),
+            Err(error) => return Err(error).context("Could not read settings"),
         };
         match saved {
             Some(store) => store,
@@ -100,12 +98,12 @@ fn run() -> Result<()> {
     }
     if interactive {
         console.line(format_args!(
-            "Ricevitore Android attivo sulla porta {}.",
+            "Android upload receiver listening on port {}.",
             receiver.address.port()
         ))?;
     } else {
         console.line(format_args!(
-            "Caricamento audio in ascolto su http://{}",
+            "Audio upload receiver listening on http://{}",
             receiver.address
         ))?;
     }
@@ -114,7 +112,7 @@ fn run() -> Result<()> {
 
 fn settings_path() -> Result<PathBuf> {
     Ok(dirs::config_dir()
-        .context("Impossibile trovare la cartella delle impostazioni")?
+        .context("Could not locate the settings directory")?
         .join("koin")
         .join("database.json"))
 }
@@ -127,8 +125,8 @@ fn setup(
     let mut selected = 0;
     loop {
         let create = match console.menu(
-            "Database di Koin",
-            &["Crea un database", "Apri un database Koin esistente"],
+            "Koin database",
+            &["Create a database", "Open an existing Koin database"],
             &mut selected,
         )? {
             0 => true,
@@ -136,11 +134,11 @@ fn setup(
             _ => return Err(FlowError::Exit),
         };
         console.section(if create {
-            "Crea un database"
+            "Create a database"
         } else {
-            "Apri un database Koin esistente"
+            "Open an existing Koin database"
         });
-        let value = match console.prompt(format_args!("Percorso [{}]", default.display())) {
+        let value = match console.prompt(format_args!("Path [{}]", default.display())) {
             Ok(value) => value,
             Err(FlowError::Cancel) => continue,
             Err(error) => return Err(error),
@@ -149,7 +147,7 @@ fn setup(
             default.clone()
         } else if let Some(rest) = value.strip_prefix("~/") {
             dirs::home_dir()
-                .context("Impossibile trovare la cartella utente")?
+                .context("Could not locate the home directory")?
                 .join(rest)
         } else {
             std::path::absolute(value)?
@@ -165,18 +163,15 @@ fn setup(
                 console.line(format_args!("Database: {}", path.display()))?;
                 return Ok((store, path));
             }
-            Err(error) => console.line(format_args!(
-                "Impossibile usare {}: {error:#}",
-                path.display()
-            ))?,
+            Err(error) => {
+                console.line(format_args!("Could not use {}: {error:#}", path.display()))?
+            }
         }
     }
 }
 
 fn save_database_path(settings: &Path, path: &Path) -> Result<()> {
-    let parent = settings
-        .parent()
-        .context("Percorso impostazioni invalido")?;
+    let parent = settings.parent().context("Invalid settings path")?;
     fs::create_dir_all(parent)?;
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
     serde_json::to_writer(&mut file, path)?;

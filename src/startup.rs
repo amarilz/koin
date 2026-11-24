@@ -75,10 +75,10 @@ impl Drop for AudioProcesses {
 
 pub fn start_default_services(console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
     if whisper_url() == LOCAL_WHISPER_URL {
-        console.startup_status("Avvio di Whisper con Docker…")?;
+        console.startup_status("Starting Whisper with Docker…")?;
         match start_whisper() {
-            Ok(()) => console.line("Whisper avviato.")?,
-            Err(error) => console.line(format_args!("Whisper non avviato: {error:#}"))?,
+            Ok(()) => console.line("Whisper started.")?,
+            Err(error) => console.line(format_args!("Could not start Whisper: {error:#}"))?,
         }
     }
     Ok(())
@@ -88,22 +88,21 @@ impl AudioProcesses {
     pub fn offer_ollama(&mut self, console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
         let base = ollama_url();
         if ollama_bind(&base).is_none() {
-            self.logs
-                .append("Endpoint Ollama configurato esternamente.");
+            self.logs.append("Using an external Ollama endpoint.");
             return Ok(());
         }
         if ollama_ready(&base) {
-            console.line("Ollama è già in esecuzione.")?;
+            console.line("Ollama is already running.")?;
             if self.ollama.is_none() {
-                self.logs.append("Ollama è già in esecuzione. I log dei processi esterni non sono disponibili qui.");
+                self.logs.append("Ollama is already running. Logs are only available for processes started by Koin.");
             }
             return Ok(());
         }
-        if console.menu("Avviare Ollama?", &["No", "Sì, avvia Ollama"], &mut 0)? == 1 {
+        if console.menu("Start Ollama?", &["No", "Yes, start Ollama"], &mut 0)? == 1 {
             match self.start_ollama(console) {
                 Ok(()) => {}
                 Err(crate::terminal::FlowError::Failure(error)) => {
-                    console.line(format_args!("Ollama non disponibile: {error:#}"))?;
+                    console.line(format_args!("Ollama unavailable: {error:#}"))?;
                 }
                 Err(error) => return Err(error),
             }
@@ -114,18 +113,18 @@ impl AudioProcesses {
     pub fn start_ollama(&mut self, console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
         let base = ollama_url();
         if ollama_ready(&base) {
-            console.line("Ollama è già in esecuzione.")?;
+            console.line("Ollama is already running.")?;
             if self.ollama.is_none() {
-                self.logs.append("Ollama è già in esecuzione. I log dei processi esterni non sono disponibili qui.");
+                self.logs.append("Ollama is already running. Logs are only available for processes started by Koin.");
             }
             return Ok(());
         }
-        let bind = ollama_bind(&base)
-            .context("Ollama può essere avviato da Koin solo per un indirizzo HTTP locale")?;
-        console.section("Avvio di Ollama");
-        console.startup_status("Avvio di Ollama…")?;
+        let bind =
+            ollama_bind(&base).context("Koin can only start Ollama for a local HTTP endpoint")?;
+        console.section("Starting Ollama");
+        console.startup_status("Starting Ollama…")?;
         start_ollama(&base, bind, self)?;
-        console.line("Ollama avviato.")?;
+        console.line("Ollama started.")?;
         Ok(())
     }
 }
@@ -145,9 +144,9 @@ fn start_whisper() -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .context("Docker e il plugin Compose devono essere installati")?;
+        .context("Docker and its Compose plugin must be installed")?;
     if !status.success() {
-        bail!("Il plugin Docker Compose non è disponibile");
+        bail!("The Docker Compose plugin is unavailable");
     }
     if !docker_ready() {
         start_docker()?;
@@ -169,16 +168,16 @@ fn start_whisper() -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-        .context("Impossibile avviare Docker Compose")?;
+        .context("Could not start Docker Compose")?;
     let write = child
         .stdin
         .take()
-        .context("Docker Compose non accetta input")?
+        .context("Could not write to Docker Compose")?
         .write_all(COMPOSE.as_bytes());
     let output = child.wait_with_output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let detail = stderr.lines().last().unwrap_or("errore sconosciuto").trim();
+        let detail = stderr.lines().last().unwrap_or("unknown error").trim();
         bail!("{detail}");
     }
     write?;
@@ -187,16 +186,16 @@ fn start_whisper() -> Result<()> {
 
 fn start_docker() -> Result<()> {
     if !cfg!(target_os = "macos") {
-        bail!("Avvia Docker e riapri Koin");
+        bail!("Start Docker and reopen Koin");
     }
     let status = Command::new("open")
         .args(["-a", "Docker"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .context("Impossibile aprire Docker Desktop")?;
+        .context("Could not open Docker Desktop")?;
     if !status.success() {
-        bail!("Impossibile aprire Docker Desktop");
+        bail!("Could not open Docker Desktop");
     }
     let deadline = Instant::now() + Duration::from_secs(40);
     while Instant::now() < deadline {
@@ -205,7 +204,7 @@ fn start_docker() -> Result<()> {
         }
         thread::sleep(Duration::from_millis(450));
     }
-    bail!("Docker Desktop non è ancora pronto");
+    bail!("Docker Desktop is not ready yet");
 }
 
 fn ollama_bind(base: &str) -> Option<SocketAddr> {
@@ -254,7 +253,7 @@ fn start_ollama(base: &str, bind: SocketAddr, processes: &mut AudioProcesses) ->
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("Impossibile eseguire ollama serve")?;
+            .context("Could not run ollama serve")?;
         if let Some(stdout) = child.stdout.take() {
             processes.logs.capture(stdout);
         }
@@ -266,18 +265,18 @@ fn start_ollama(base: &str, bind: SocketAddr, processes: &mut AudioProcesses) ->
     let child = processes
         .ollama
         .as_mut()
-        .context("Processo Ollama non disponibile")?;
+        .context("Ollama process is unavailable")?;
     let deadline = Instant::now() + Duration::from_secs(8);
     while Instant::now() < deadline {
         if ollama_ready(base) {
             return Ok(());
         }
         if let Some(status) = child.try_wait()? {
-            bail!("Ollama si è chiuso durante l’avvio ({status})");
+            bail!("Ollama exited during startup ({status})");
         }
         thread::sleep(Duration::from_millis(250));
     }
-    bail!("Ollama non ha ancora risposto su {bind}");
+    bail!("Ollama has not responded on {bind}");
 }
 
 #[cfg(test)]

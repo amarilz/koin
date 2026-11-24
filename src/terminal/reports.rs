@@ -3,12 +3,12 @@ use chrono::{Datelike, Local, NaiveDate};
 use koin::{MonthlyReport, Store};
 use std::io::{BufRead, Write};
 
-const VIEWS: [&str; 2] = ["Spese per categoria", "Guadagno netto mese per mese"];
+const VIEWS: [&str; 2] = ["Expenses by category", "Monthly net income"];
 
 pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &Store) -> Flow<()> {
     let mut selected = 0;
     loop {
-        let choice = console.menu("Report", &VIEWS, &mut selected)?;
+        let choice = console.menu("Reports", &VIEWS, &mut selected)?;
         let Some(title) = VIEWS.get(choice) else {
             return Ok(());
         };
@@ -24,10 +24,10 @@ pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &Store
 
 fn expenses(console: &mut Console<impl BufRead, impl Write>, report: &MonthlyReport) -> Flow<()> {
     if report.expenses.is_empty() {
-        console.line("Nessuna spesa negli ultimi 12 mesi.")?;
+        console.line("No expenses in the last 12 months.")?;
         return console.show_results();
     }
-    let mut headers = vec!["Categoria".to_owned(), "Media mensile".to_owned()];
+    let mut headers = vec!["Category".to_owned(), "Monthly average".to_owned()];
     headers.extend(report.months.map(month_label));
     let rows: Vec<_> = report
         .expenses
@@ -41,7 +41,7 @@ fn expenses(console: &mut Console<impl BufRead, impl Write>, report: &MonthlyRep
     if let Some(screen) = &mut console.screen {
         return screen.expense_table(&headers, &rows);
     }
-    console.line("Ultimi 12 mesi · esclusa la categoria Prestito")?;
+    console.line("Last 12 months · excluding the Prestito category")?;
     console.line(headers.join(" | "))?;
     for row in rows {
         console.line(row.join(" | "))?;
@@ -57,13 +57,15 @@ fn net(console: &mut Console<impl BufRead, impl Write>, report: &MonthlyReport) 
         .map(|value| value.unsigned_abs())
         .max()
         .unwrap_or(0);
-    console.line("Entrate e uscite · ultimi 12 mesi · esclusa la categoria Prestito")?;
+    let total: i128 = report.net.iter().sum();
+    console.line("Income minus expenses · last 12 months · excluding the Prestito category")?;
+    console.line(format_args!("12-month net total: {}", signed_amount(total)))?;
     console.line(format_args!(
         "{:<8}  {:>width$}│{:<width$}  {:>10}",
-        "Mese",
-        "Negativo",
-        "Positivo",
-        "Netto",
+        "Month",
+        "Negative",
+        "Positive",
+        "Net",
         width = BAR
     ))?;
     for (month, amount) in report.months.iter().zip(report.net) {
@@ -78,11 +80,7 @@ fn net(console: &mut Console<impl BufRead, impl Write>, report: &MonthlyReport) 
         } else {
             ("", bars.as_str())
         };
-        let amount_label = if amount > 0 {
-            format!("+{}", format_cents(amount))
-        } else {
-            format_cents(amount)
-        };
+        let amount_label = signed_amount(amount);
         console.line(format_args!(
             "{:<8}  {left:>width$}│{right:<width$}  {amount_label:>10}",
             month_label(*month),
@@ -94,7 +92,12 @@ fn net(console: &mut Console<impl BufRead, impl Write>, report: &MonthlyReport) 
 
 fn month_label(month: NaiveDate) -> String {
     const MONTH_NAMES: [&str; 12] = [
-        "gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     format!("{} {}", MONTH_NAMES[month.month0() as usize], month.year())
+}
+
+fn signed_amount(amount: i128) -> String {
+    let sign = if amount > 0 { "+" } else { "" };
+    format!("{sign}{}", format_cents(amount))
 }

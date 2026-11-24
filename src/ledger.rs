@@ -74,6 +74,9 @@ pub struct Transfer<'a> {
     pub description: Option<&'a str>,
 }
 
+const DEFAULT_TRANSFER_DESCRIPTION: &str = "Transfer between accounts";
+const LEGACY_TRANSFER_DESCRIPTION: &str = "Trasferimento tra account";
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Entry {
     pub transaction_id: i64,
@@ -83,6 +86,15 @@ pub struct Entry {
     pub kind: Option<CategoryType>,
     pub amount: i64,
     pub description: Option<String>,
+}
+
+impl Entry {
+    pub fn display_description(&self) -> Option<&str> {
+        match (self.category.as_ref(), self.description.as_deref()) {
+            (None, Some(LEGACY_TRANSFER_DESCRIPTION)) => Some(DEFAULT_TRANSFER_DESCRIPTION),
+            (_, description) => description,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -185,7 +197,7 @@ impl Store {
     pub fn history(&self, filter: HistoryFilter) -> Result<Vec<Entry>> {
         ensure!(
             !matches!((filter.from, filter.through), (Some(from), Some(through)) if from > through),
-            "La data iniziale deve precedere o coincidere con quella finale"
+            "The start date must be on or before the end date"
         );
         self.query_entries(filter, -1)
     }
@@ -318,7 +330,7 @@ pub(crate) fn add_movement(db: &Connection, input: Movement<'_>) -> Result<i64> 
         ],
         |row| row.get(0),
     )?;
-    ensure!(!duplicate, "Transazione già esistente");
+    ensure!(!duplicate, "Transaction already exists");
     let id = add_transaction(db, input.date)?;
     add_entry(
         db,
@@ -339,7 +351,7 @@ pub(crate) fn add_transfer(db: &Connection, input: Transfer<'_>) -> Result<i64> 
     let description = input
         .description
         .filter(|text| !text.is_empty())
-        .unwrap_or("Trasferimento tra account");
+        .unwrap_or(DEFAULT_TRANSFER_DESCRIPTION);
     let duplicate: bool = db.query_row(
         "SELECT EXISTS (
              SELECT 1 FROM transactions t
@@ -347,14 +359,18 @@ pub(crate) fn add_transfer(db: &Connection, input: Transfer<'_>) -> Result<i64> 
              JOIN transaction_entries dst ON dst.transaction_id = t.id
              WHERE t.occurred_at = ?1 AND src.account_id = ?2 AND dst.account_id = ?3
                AND src.amount = -?4 AND dst.amount = ?4
-               AND src.description = ?5 AND dst.description = ?5
+               AND ((src.description = ?5 AND dst.description = ?5)
+                 OR (?5 IN (?6, ?7) AND src.description IN (?6, ?7) AND dst.description IN (?6, ?7)))
                AND src.category_id IS NULL AND dst.category_id IS NULL
          )",
-        params![input.date, from, to, input.amount, description],
+        params![
+            input.date, from, to, input.amount, description,
+            DEFAULT_TRANSFER_DESCRIPTION, LEGACY_TRANSFER_DESCRIPTION
+        ],
         |row| row.get(0),
     )?;
-    ensure!(!duplicate, "Trasferimento già esistente");
-    ensure!(balance(db, from)? >= input.amount, "Saldo insufficiente");
+    ensure!(!duplicate, "Transfer already exists");
+    ensure!(balance(db, from)? >= input.amount, "Insufficient balance");
     balance(db, to)?
         .checked_add(input.amount)
         .context("Account balance overflow")?;

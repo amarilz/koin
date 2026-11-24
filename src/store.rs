@@ -54,7 +54,10 @@ impl Store {
             [],
             |row| row.get(0),
         )?;
-        ensure!(has_schema, "Il file non contiene uno schema Koin");
+        ensure!(
+            has_schema,
+            "The file does not contain a Koin database schema"
+        );
         Self::initialize(connection)
     }
 

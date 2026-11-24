@@ -49,35 +49,35 @@ pub fn run(args: impl Iterator<Item = OsString>) -> Result<()> {
         match flag.to_str() {
             Some("--database") => {
                 database = Some(PathBuf::from(
-                    args.next().context("Specifica il file SQLite")?,
+                    args.next().context("Specify the SQLite file")?,
                 ))
             }
             Some("--listen") => {
                 address = args
                     .next()
                     .and_then(|value| value.into_string().ok())
-                    .context("Specifica l’indirizzo IP e la porta")?
+                    .context("Specify the IP address and port")?
                     .parse()
-                    .context("Indirizzo di ascolto invalido")?;
+                    .context("Invalid listen address")?;
             }
             Some("--help" | "-h") => {
-                println!("Uso: koin serve-audio [--database FILE] [--listen IP:PORTA]");
+                println!("Usage: koin serve-audio [--database FILE] [--listen IP:PORT]");
                 return Ok(());
             }
-            _ => bail!("Argomento sconosciuto. Usa koin serve-audio --help"),
+            _ => bail!("Unknown argument. Run koin serve-audio --help"),
         }
     }
     let database = match database {
         Some(path) => path,
         None => serde_json::from_slice(
             &fs::read(settings_path()?)
-                .context("Avvia prima Koin per scegliere il database, oppure usa --database")?,
+                .context("Open Koin to select a database first, or use --database")?,
         )?,
     };
     Store::open_existing(&database)?;
     let receiver = start(&database, address, true)?;
     println!(
-        "Caricamento audio in ascolto su http://{}",
+        "Audio upload receiver listening on http://{}",
         receiver.address
     );
     receiver.runtime.block_on(receiver.task)??;
@@ -94,7 +94,7 @@ fn listen_address() -> Result<SocketAddr> {
     match env::var("KOIN_UPLOAD_LISTEN") {
         Ok(value) => value
             .parse()
-            .context("KOIN_UPLOAD_LISTEN deve essere nel formato IP:PORTA"),
+            .context("KOIN_UPLOAD_LISTEN must use the format IP:PORT"),
         Err(env::VarError::NotPresent) => Ok(([0, 0, 0, 0], 8080).into()),
         Err(error) => Err(error.into()),
     }
@@ -106,13 +106,13 @@ pub fn start_cli(database: &Path, interactive: bool) -> Result<Receiver> {
 
 fn start(database: &Path, address: SocketAddr, log_errors: bool) -> Result<Receiver> {
     let database: Arc<Path> = fs::canonicalize(database)
-        .context("Impossibile trovare il database Koin")?
+        .context("Could not locate the Koin database")?
         .into();
     let token = match env::var("KOIN_UPLOAD_TOKEN") {
         Ok(token) => {
             ensure!(
                 !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_graphic()),
-                "KOIN_UPLOAD_TOKEN deve contenere caratteri ASCII senza spazi"
+                "KOIN_UPLOAD_TOKEN must contain ASCII characters with no spaces"
             );
             Some(Arc::from(token))
         }
@@ -121,7 +121,7 @@ fn start(database: &Path, address: SocketAddr, log_errors: bool) -> Result<Recei
     };
 
     let listener = TcpListener::bind(address)
-        .with_context(|| format!("Impossibile avviare il ricevitore audio su {address}"))?;
+        .with_context(|| format!("Could not start the audio upload receiver on {address}"))?;
     let address = listener.local_addr()?;
     listener.set_nonblocking(true)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -173,12 +173,12 @@ fn processing_worker(database: Arc<Path>, log_errors: bool) -> Result<SyncSender
                         Ok(failures) if log_errors => {
                             for failure in failures {
                                 eprintln!(
-                                    "Audio #{} in attesa: {:#}",
+                                    "Audio #{} is pending: {:#}",
                                     failure.recording_id, failure.error
                                 );
                             }
                         }
-                        Err(error) if log_errors => eprintln!("Errore nella coda audio: {error:#}"),
+                        Err(error) if log_errors => eprintln!("Audio queue error: {error:#}"),
                         _ => {}
                     }
                     match wait.recv_timeout(Duration::from_secs(60)) {
@@ -188,7 +188,7 @@ fn processing_worker(database: Arc<Path>, log_errors: bool) -> Result<SyncSender
                 }
             })() && log_errors
             {
-                eprintln!("Elaborazione audio non disponibile: {error:#}");
+                eprintln!("Audio processing unavailable: {error:#}");
             }
         })?;
     Ok(wake)
@@ -205,7 +205,7 @@ async fn health(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> Response {
     if !local_peer(peer.ip()) {
         return problem(
             StatusCode::FORBIDDEN,
-            "il servizio è riservato alla rete locale",
+            "This service is available only on the local network",
         );
     }
     Json(json!({"status": "ok"})).into_response()
@@ -219,7 +219,7 @@ async fn upload(
     if !local_peer(peer.ip()) {
         return problem(
             StatusCode::FORBIDDEN,
-            "il caricamento è riservato alla rete locale",
+            "Uploads are available only on the local network",
         );
     }
     if let Some(token) = &server.token {
@@ -235,10 +235,7 @@ async fn upload(
                     axum::http::header::WWW_AUTHENTICATE,
                     HeaderValue::from_static("Bearer"),
                 )],
-                problem(
-                    StatusCode::UNAUTHORIZED,
-                    "token di caricamento mancante o non valido",
-                ),
+                problem(StatusCode::UNAUTHORIZED, "Missing or invalid upload token"),
             )
                 .into_response();
         }
@@ -246,7 +243,7 @@ async fn upload(
     let Ok(_permit) = server.uploads.try_acquire() else {
         return problem(
             StatusCode::SERVICE_UNAVAILABLE,
-            "troppi caricamenti in corso",
+            "Too many uploads in progress",
         );
     };
     let key = match idempotency_key(request.headers()) {
@@ -258,10 +255,7 @@ async fn upload(
             Ok(Ok(form)) => form,
             Ok(Err(error)) => return error.into_response(),
             Err(_) => {
-                return problem(
-                    StatusCode::REQUEST_TIMEOUT,
-                    "caricamento interrotto per timeout",
-                );
+                return problem(StatusCode::REQUEST_TIMEOUT, "Upload timed out");
             }
         };
     let fingerprint = form.fingerprint();
@@ -287,24 +281,24 @@ async fn upload(
         }
         Ok(Ok(UploadOutcome::Conflict)) => problem(
             StatusCode::CONFLICT,
-            "chiave di idempotenza già usata con dati diversi",
+            "Idempotency key already used with different data",
         ),
         Ok(Err(error)) => {
             if server.log_errors {
-                eprintln!("Errore nel salvataggio audio: {error:#}");
+                eprintln!("Could not save audio: {error:#}");
             }
             problem(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "impossibile salvare la registrazione",
+                "Could not save recording",
             )
         }
         Err(error) => {
             if server.log_errors {
-                eprintln!("Errore nel salvataggio audio: {error}");
+                eprintln!("Could not save audio: {error}");
             }
             problem(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "impossibile salvare la registrazione",
+                "Could not save recording",
             )
         }
     }
@@ -317,13 +311,13 @@ fn idempotency_key(headers: &HeaderMap) -> std::result::Result<Option<String>, U
     };
     let key = key
         .to_str()
-        .map_err(|_| UploadError::bad("chiave di idempotenza non valida"))?;
+        .map_err(|_| UploadError::bad("Invalid idempotency key"))?;
     if key.is_empty()
         || key.len() > 128
         || !key.bytes().all(|byte| byte.is_ascii_graphic())
         || values.next().is_some()
     {
-        return Err(UploadError::bad("chiave di idempotenza non valida"));
+        return Err(UploadError::bad("Invalid idempotency key"));
     }
     Ok(Some(key.to_owned()))
 }
@@ -348,7 +342,7 @@ impl Form {
 async fn read_form(request: Request, server: &Server) -> std::result::Result<Form, UploadError> {
     let mut multipart = Multipart::from_request(request, server)
         .await
-        .map_err(|_| UploadError::bad("form multipart mancante o non valido"))?;
+        .map_err(|_| UploadError::bad("Missing or invalid multipart form"))?;
     let (mut file, mut duration) = (None, None);
     while let Some(mut field) = multipart.next_field().await? {
         match field.name() {
@@ -356,7 +350,7 @@ async fn read_form(request: Request, server: &Server) -> std::result::Result<For
                 let media_type = field
                     .content_type()
                     .filter(|mime| mime.starts_with("audio/"))
-                    .ok_or_else(|| UploadError::bad("il file caricato non è un audio valido"))?
+                    .ok_or_else(|| UploadError::bad("The uploaded file is not valid audio"))?
                     .to_owned();
                 let mut audio = Vec::new();
                 while let Some(chunk) = field.chunk().await? {
@@ -366,7 +360,7 @@ async fn read_form(request: Request, server: &Server) -> std::result::Result<For
                     audio.extend_from_slice(&chunk);
                 }
                 if audio.is_empty() {
-                    return Err(UploadError::bad("la registrazione è vuota"));
+                    return Err(UploadError::bad("The recording is empty"));
                 }
                 file = Some((audio, media_type));
             }
@@ -374,7 +368,7 @@ async fn read_form(request: Request, server: &Server) -> std::result::Result<For
                 let mut value = Vec::new();
                 while let Some(chunk) = field.chunk().await? {
                     if value.len() + chunk.len() > 20 {
-                        return Err(UploadError::bad("durata della registrazione non valida"));
+                        return Err(UploadError::bad("Invalid recording duration"));
                     }
                     value.extend_from_slice(&chunk);
                 }
@@ -383,19 +377,18 @@ async fn read_form(request: Request, server: &Server) -> std::result::Result<For
                         .ok()
                         .and_then(|value| value.parse::<i64>().ok())
                         .filter(|value| *value >= 0)
-                        .ok_or_else(|| UploadError::bad("durata della registrazione non valida"))?,
+                        .ok_or_else(|| UploadError::bad("Invalid recording duration"))?,
                 );
             }
             Some("audio" | "durationMs") => {
-                return Err(UploadError::bad("campi multipart duplicati"));
+                return Err(UploadError::bad("Duplicate multipart fields"));
             }
             _ => {}
         }
     }
     let (audio, mime_type) =
-        file.ok_or_else(|| UploadError::bad("file audio mancante o non valido"))?;
-    let duration =
-        duration.ok_or_else(|| UploadError::bad("durata della registrazione non valida"))?;
+        file.ok_or_else(|| UploadError::bad("Missing or invalid audio file"))?;
+    let duration = duration.ok_or_else(|| UploadError::bad("Invalid recording duration"))?;
     Ok(Form {
         audio,
         mime_type,
@@ -413,7 +406,7 @@ impl UploadError {
     fn too_large() -> Self {
         Self(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "registrazione troppo grande (massimo 25 MiB)",
+            "Recording too large (maximum 25 MiB)",
         )
     }
 }
@@ -423,7 +416,7 @@ impl From<MultipartError> for UploadError {
         if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
             Self::too_large()
         } else {
-            Self::bad("form multipart mancante o non valido")
+            Self::bad("Missing or invalid multipart form")
         }
     }
 }

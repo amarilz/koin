@@ -15,7 +15,7 @@ pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &Store
         .collect();
     let mut filter = HistoryFilter::default();
     loop {
-        console.section("Storico movimenti");
+        console.section("Transaction history");
         let entries = store.history(filter)?;
         let mut rows: Vec<String> = entries
             .into_iter()
@@ -24,18 +24,16 @@ pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &Store
                     .get(entry.account.as_str())
                     .copied()
                     .unwrap_or_default();
-                let category = entry.category.as_deref().unwrap_or("Trasferimento");
+                let category = entry.category.as_deref().unwrap_or("Transfer");
                 let description = entry
-                    .description
-                    .as_deref()
+                    .display_description()
                     .filter(|text| !text.is_empty())
                     .map(|text| format!("  {text}"))
                     .unwrap_or_default();
                 let sign = if entry.amount > 0 { "+" } else { "" };
                 format!(
-                    "{}  #{}  {}  {}  {sign}{} {currency}{description}",
+                    "{}  {}  {}  {sign}{} {currency}{description}",
                     entry.date,
-                    entry.transaction_id,
                     entry.account,
                     category,
                     format_cents(entry.amount)
@@ -43,13 +41,13 @@ pub(super) fn run(console: &mut Console<impl BufRead, impl Write>, store: &Store
             })
             .collect();
         if rows.is_empty() {
-            rows.push("Nessun movimento corrispondente.".into());
+            rows.push("No matching transactions.".into());
         }
         let labels = [format!(
-            "Filtri   {}",
+            "Filters   {}",
             criteria(filter, &accounts, &categories).join(" · ")
         )];
-        if console.menu_with_overview("Storico movimenti", &labels, &mut 0, &rows)? != 0 {
+        if console.menu_with_overview("Transaction history", &labels, &mut 0, &rows)? != 0 {
             return Ok(());
         }
         edit_filters(console, &mut filter, &accounts, &categories)?;
@@ -60,20 +58,20 @@ fn criteria(filter: HistoryFilter, accounts: &[Account], categories: &[Category]
     let account = accounts
         .iter()
         .find(|account| Some(account.id) == filter.account_id)
-        .map_or("Tutti i conti", |account| account.name.as_str());
+        .map_or("All accounts", |account| account.name.as_str());
     let category = match filter.category {
-        Some(HistoryCategory::Transfers) => "Trasferimenti",
+        Some(HistoryCategory::Transfers) => "Transfers",
         Some(HistoryCategory::Category(id)) => categories
             .iter()
             .find(|c| c.id == id)
-            .map_or("Tutte le categorie", |category| category.name.as_str()),
-        None => "Tutte le categorie",
+            .map_or("All categories", |category| category.name.as_str()),
+        None => "All categories",
     };
     let dates = match (filter.from, filter.through) {
         (Some(from), Some(through)) => format!("{from} → {through}"),
-        (Some(from), None) => format!("Dal {from}"),
-        (None, Some(through)) => format!("Fino al {through}"),
-        (None, None) => "Tutte le date".to_owned(),
+        (Some(from), None) => format!("From {from}"),
+        (None, Some(through)) => format!("Through {through}"),
+        (None, None) => "All dates".to_owned(),
     };
     [account.to_owned(), category.to_owned(), dates]
 }
@@ -86,32 +84,32 @@ fn edit_filters(
 ) -> Flow<()> {
     let mut selected = 0;
     loop {
-        console.section("Filtri storico");
+        console.section("History filters");
         let [account, category, dates] = criteria(*filter, accounts, categories);
         let labels = [
-            format!("Conto: {account}"),
-            format!("Categoria: {category}"),
+            format!("Account: {account}"),
+            format!("Category: {category}"),
             format!("Date: {dates}"),
-            "Azzera filtri".to_owned(),
+            "Clear filters".to_owned(),
         ];
-        let action = console.menu("Filtri storico", &labels, &mut selected)?;
+        let action = console.menu("History filters", &labels, &mut selected)?;
         let outcome = match action {
             0 => {
-                let mut choices = vec!["Tutti i conti"];
+                let mut choices = vec!["All accounts"];
                 choices.extend(accounts.iter().map(|a| a.name.as_str()));
-                console.select("Filtra per conto", &choices).map(|choice| {
+                console.select("Filter by account", &choices).map(|choice| {
                     filter.account_id = choice.checked_sub(1).map(|index| accounts[index].id);
                 })
             }
             1 => {
-                let mut choices = vec!["Tutte le categorie".to_owned(), "Trasferimenti".to_owned()];
+                let mut choices = vec!["All categories".to_owned(), "Transfers".to_owned()];
                 choices.extend(
                     categories
                         .iter()
                         .map(|c| format!("{} ({})", c.name, kind_label(c.kind))),
                 );
                 console
-                    .select("Filtra per categoria", &choices)
+                    .select("Filter by category", &choices)
                     .map(|choice| {
                         filter.category = match choice {
                             0 => None,
@@ -140,14 +138,14 @@ fn edit_dates(
     filter: &mut HistoryFilter,
 ) -> Flow<()> {
     let choice = console.select(
-        "Filtra per data",
+        "Filter by date",
         &[
-            "Ultima settimana",
-            "Ultimo mese",
-            "Ultimi tre mesi",
-            "Ultimo anno",
-            "Intervallo personalizzato",
-            "Tutte le date",
+            "Last week",
+            "Last month",
+            "Last three months",
+            "Last year",
+            "Custom date range",
+            "All dates",
         ],
     )?;
     let today = Local::now().date_naive();
@@ -172,13 +170,13 @@ fn date_range(
     console: &mut Console<impl BufRead, impl Write>,
     filter: &mut HistoryFilter,
 ) -> Flow<()> {
-    let from = optional_date(console, "Dal")?;
+    let from = optional_date(console, "From")?;
     let through = loop {
-        let through = optional_date(console, "Al")?;
+        let through = optional_date(console, "Through")?;
         if !matches!((from, through), (Some(from), Some(through)) if from > through) {
             break through;
         }
-        console.line("La data finale deve coincidere con quella iniziale o essere successiva.")?;
+        console.line("The end date must be on or after the start date.")?;
     };
     filter.from = from;
     filter.through = through;
@@ -190,7 +188,7 @@ fn optional_date(
     label: &str,
 ) -> Flow<Option<NaiveDate>> {
     console.field(
-        format_args!("{label} (AAAA-MM-GG, vuoto per nessun limite)"),
+        format_args!("{label} (YYYY-MM-DD, blank for no limit)"),
         |text| {
             if text.is_empty() {
                 Some(None)
@@ -201,6 +199,6 @@ fn optional_date(
                     .map(Some)
             }
         },
-        "Usa il formato AAAA-MM-GG.",
+        "Use YYYY-MM-DD.",
     )
 }

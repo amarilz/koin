@@ -112,7 +112,7 @@ fn transfers_are_atomic_and_detect_duplicates() -> Result<()> {
         assert_eq!(entry.category, None);
         assert_eq!(
             entry.description.as_deref(),
-            Some("Trasferimento tra account")
+            Some("Transfer between accounts")
         );
     }
     Ok(())
@@ -266,7 +266,7 @@ fn simultaneous_transfers_cannot_spend_the_same_balance() -> Result<()> {
         (Ok(_), Err(error)) | (Err(error), Ok(_)) => error,
         outcomes => panic!("Expected exactly one successful transfer, got {outcomes:?}"),
     };
-    assert_eq!(failure.to_string(), "Saldo insufficiente");
+    assert_eq!(failure.to_string(), "Insufficient balance");
     assert_eq!(store.account_balance(bank)?, 300);
     assert_eq!(store.recent_entries(10)?.len(), 2);
     Ok(())
@@ -353,5 +353,39 @@ fn full_history_combines_account_category_and_inclusive_date_filters() -> Result
             })
             .is_err()
     );
+    Ok(())
+}
+
+#[test]
+fn legacy_default_transfer_description_still_prevents_duplicate_retries() -> Result<()> {
+    let mut store = Store::open(":memory:")?;
+    let bank = store.create_account("Banca", "EUR", 5_000)?;
+    store.create_account("Contanti", "EUR", 0)?;
+    let transfer = || Transfer {
+        from: "Banca",
+        to: "Contanti",
+        date: date(24),
+        amount: 500,
+        description: None,
+    };
+    store.transfer(Transfer {
+        description: Some("Trasferimento tra account"),
+        ..transfer()
+    })?;
+    assert_eq!(
+        store.transfer(transfer()).unwrap_err().to_string(),
+        "Transfer already exists"
+    );
+    let entries = store.recent_entries(10)?;
+    assert_eq!(entries.len(), 2);
+    assert_eq!(
+        entries[0].description.as_deref(),
+        Some("Trasferimento tra account")
+    );
+    assert_eq!(
+        entries[0].display_description(),
+        Some("Transfer between accounts")
+    );
+    assert_eq!(store.account_balance(bank)?, 4_500);
     Ok(())
 }

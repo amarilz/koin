@@ -28,15 +28,15 @@ impl Microphone {
     pub(super) fn start() -> Result<Self> {
         let device = cpal::default_host()
             .default_input_device()
-            .context("Nessun microfono disponibile")?;
+            .context("No microphone available")?;
         let supported = device
             .default_input_config()
-            .context("Impossibile configurare il microfono")?;
+            .context("Could not configure the microphone")?;
         let config = supported.config();
         let channels = usize::from(config.channels);
         ensure!(
             channels > 0 && config.sample_rate.0 > 0,
-            "Configurazione audio invalida"
+            "Invalid audio configuration"
         );
         let limit = ((MAX_WAV_BYTES - WAV_HEADER_BYTES) / size_of::<i16>() / channels) * channels;
         let buffer = Arc::new(Mutex::new(Buffer::default()));
@@ -52,10 +52,10 @@ impl Microphone {
             SampleFormat::U64 => input_stream::<u64>(&device, &config, &buffer, limit),
             SampleFormat::F32 => input_stream::<f32>(&device, &config, &buffer, limit),
             SampleFormat::F64 => input_stream::<f64>(&device, &config, &buffer, limit),
-            format => bail!("Formato del microfono non supportato: {format:?}"),
+            format => bail!("Unsupported microphone format: {format:?}"),
         }
-        .context("Impossibile aprire il microfono. Verifica i permessi di registrazione")?;
-        stream.play().context("Impossibile avviare il microfono")?;
+        .context("Could not open the microphone. Check your microphone permissions")?;
+        stream.play().context("Could not start the microphone")?;
         Ok(Self {
             stream,
             buffer,
@@ -68,9 +68,9 @@ impl Microphone {
         let buffer = self
             .buffer
             .lock()
-            .map_err(|_| anyhow::anyhow!("Errore nel buffer audio"))?;
+            .map_err(|_| anyhow::anyhow!("Audio buffer error"))?;
         if let Some(error) = &buffer.error {
-            bail!("Errore del microfono: {error}");
+            bail!("Microphone error: {error}");
         }
         Ok(buffer.samples.len() == self.limit)
     }
@@ -80,9 +80,9 @@ impl Microphone {
         let mut buffer = self
             .buffer
             .lock()
-            .map_err(|_| anyhow::anyhow!("Errore nel buffer audio"))?;
+            .map_err(|_| anyhow::anyhow!("Audio buffer error"))?;
         if let Some(error) = buffer.error.take() {
-            bail!("Errore del microfono: {error}");
+            bail!("Microphone error: {error}");
         }
         let samples = std::mem::take(&mut buffer.samples);
         encode_wav(&samples, self.config.channels, self.config.sample_rate.0)
@@ -122,7 +122,7 @@ where
 
 fn encode_wav(samples: &[i16], channels: u16, rate: u32) -> Result<(Vec<u8>, i64)> {
     let frames = samples.len() / usize::from(channels);
-    ensure!(frames > 0, "Nessun audio ricevuto dal microfono");
+    ensure!(frames > 0, "No audio received from the microphone");
     let mut output = Cursor::new(Vec::with_capacity(
         WAV_HEADER_BYTES + std::mem::size_of_val(samples),
     ));

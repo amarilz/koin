@@ -17,10 +17,10 @@ pub(super) fn run(
     audio_processes: &mut AudioProcesses,
 ) -> Flow<()> {
     let entries = [
-        "Registra dal microfono",
-        "Rivedi registrazioni",
-        "Elabora registrazioni in attesa",
-        "Avvia Ollama",
+        "Record from microphone",
+        "Review recordings",
+        "Process pending recordings",
+        "Start Ollama",
     ];
     let mut selected = 0;
     loop {
@@ -35,7 +35,7 @@ pub(super) fn run(
         match outcome {
             Ok(()) | Err(FlowError::Cancel) => {}
             Err(FlowError::Exit) => return Err(FlowError::Exit),
-            Err(FlowError::Failure(error)) => console.line(format_args!("Errore: {error:#}"))?,
+            Err(FlowError::Failure(error)) => console.line(format_args!("Error: {error:#}"))?,
         }
         console.show_results()?;
     }
@@ -45,21 +45,21 @@ fn record(console: &mut Console<impl BufRead, impl Write>, store: &mut Store) ->
     let screen = console
         .screen
         .as_mut()
-        .context("La registrazione richiede un terminale interattivo")?;
+        .context("Recording requires an interactive terminal")?;
     let (wav, duration_ms) = screen.record()?;
     let id = store.add_recording(&wav, "audio/wav", duration_ms)?;
-    console.section("Registrazione audio");
-    activity(console, "Trascrizione con Whisper…")?;
+    console.section("Audio recording");
+    activity(console, "Transcribing with Whisper…")?;
     if let Err(error) = whisper().and_then(|client| store.transcribe_recording(id, &client)) {
         console.line(format_args!(
-            "Registrazione #{id} salvata. Trascrizione in attesa: {error:#}"
+            "Recording #{id} saved. Transcription pending: {error:#}"
         ))?;
         return Ok(());
     }
-    activity(console, "Estrazione del movimento con Ollama…")?;
+    activity(console, "Extracting transaction with Ollama…")?;
     if let Err(error) = ollama().and_then(|client| store.extract_recording(id, &client)) {
         console.line(format_args!(
-            "Trascrizione salvata. Estrazione in attesa: {error:#}"
+            "Transcript saved. Extraction pending: {error:#}"
         ))?;
         console.show_results()?;
     }
@@ -67,17 +67,17 @@ fn record(console: &mut Console<impl BufRead, impl Write>, store: &mut Store) ->
 }
 
 fn process_pending(console: &mut Console<impl BufRead, impl Write>, store: &Store) -> Flow<()> {
-    console.section("Elaborazione audio");
+    console.section("Audio processing");
     let transcriber = whisper()?;
     let extractor = ollama()?;
-    activity(console, "Elaborazione delle registrazioni in attesa…")?;
+    activity(console, "Processing pending recordings…")?;
     let failures = store.process_pending(&transcriber, &extractor)?;
     if failures.is_empty() {
-        console.line("Nessuna registrazione rimasta in attesa.")?;
+        console.line("No pending recordings remain.")?;
     }
     for failure in failures {
         console.line(format_args!(
-            "Registrazione #{} ancora in attesa: {:#}",
+            "Recording #{} is still pending: {:#}",
             failure.recording_id, failure.error
         ))?;
     }
@@ -98,10 +98,10 @@ fn review_recordings(
     console: &mut Console<impl BufRead, impl Write>,
     store: &mut Store,
 ) -> Flow<()> {
-    console.section("Rivedi registrazioni");
+    console.section("Review recordings");
     let recordings = store.reviewable_recordings()?;
     if recordings.is_empty() {
-        console.line("Nessuna registrazione trascritta da rivedere.")?;
+        console.line("No transcribed recordings to review.")?;
         return Ok(());
     }
     let labels: Vec<_> = recordings
@@ -125,17 +125,17 @@ fn review_recordings(
             format!("#{}  {date}  {text}", recording.id)
         })
         .collect();
-    let index = console.select("Registrazioni da rivedere", &labels)?;
+    let index = console.select("Recordings to review", &labels)?;
     review(console, store, recordings[index].id)
 }
 
 fn review(console: &mut Console<impl BufRead, impl Write>, store: &mut Store, id: i64) -> Flow<()> {
     let recording = store.recording_for_review(id)?;
-    let title = format!("Registrazione #{id}");
+    let title = format!("Recording #{id}");
     let entries = [
-        "Rivedi e conferma movimento",
-        "Leggi trascrizione",
-        "Scarta registrazione",
+        "Review and confirm transaction",
+        "Read transcript",
+        "Discard recording",
     ];
     let mut selected = 0;
     loop {
@@ -146,7 +146,7 @@ fn review(console: &mut Console<impl BufRead, impl Write>, store: &mut Store, id
                 Ok(false) | Err(FlowError::Cancel) => continue,
                 Err(FlowError::Exit) => return Err(FlowError::Exit),
                 Err(FlowError::Failure(error)) => {
-                    console.line(format_args!("Errore: {error:#}"))?;
+                    console.line(format_args!("Error: {error:#}"))?;
                     console.show_results()?;
                 }
             },
@@ -155,14 +155,14 @@ fn review(console: &mut Console<impl BufRead, impl Write>, store: &mut Store, id
                     console.line(line)?;
                 }
                 if recording.transcription.is_empty() {
-                    console.line("Trascrizione vuota.")?;
+                    console.line("Empty transcript.")?;
                 }
                 console.show_results()?;
             }
-            2 => match console.select("Scartare la registrazione?", &["Scarta"]) {
+            2 => match console.select("Discard this recording?", &["Discard"]) {
                 Ok(_) => {
                     store.discard_recording(id)?;
-                    console.line("Registrazione scartata.")?;
+                    console.line("Recording discarded.")?;
                     return Ok(());
                 }
                 Err(FlowError::Cancel) => {}
@@ -181,25 +181,25 @@ fn review_movement(
     const KINDS: [&str; 3] = ["INCOME", "EXPENSE", "TRANSFER"];
     let empty = Extraction::default();
     let suggestion = recording.extraction.as_ref().unwrap_or(&empty);
-    console.section("Rivedi movimento");
+    console.section("Review transaction");
     let mut selection = KINDS
         .iter()
         .position(|kind| Some(*kind) == suggestion.category_type.as_deref())
         .unwrap_or(0);
     let kind = console.menu(
-        "Tipo movimento",
-        &["Entrata", "Uscita", "Trasferimento"],
+        "Transaction type",
+        &["Income", "Expense", "Transfer"],
         &mut selection,
     )?;
     let Some(kind) = KINDS.get(kind).copied() else {
         return Ok(false);
     };
-    let account = required(console, "Conto", suggestion.account_name.as_deref())?;
+    let account = required(console, "Account", suggestion.account_name.as_deref())?;
     let (account_to, category) = if kind == "TRANSFER" {
         (
             Some(required(
                 console,
-                "Conto di destinazione",
+                "Destination account",
                 suggestion.account_to.as_deref(),
             )?),
             None,
@@ -209,7 +209,7 @@ fn review_movement(
             None,
             Some(required(
                 console,
-                "Categoria",
+                "Category",
                 suggestion.category_name.as_deref(),
             )?),
         )
@@ -219,30 +219,30 @@ fn review_movement(
         .filter(|amount| *amount > 0.0 && *amount <= 1e12)
         .map(|amount| format_cents((amount * 100.0).round() as i64));
     let amount = loop {
-        let value = input(console, "Importo", proposed_amount.as_deref())?;
+        let value = input(console, "Amount", proposed_amount.as_deref())?;
         if let Some(amount) =
             parse_cents(&value).filter(|amount| *amount > 0 && *amount <= 100_000_000_000_000)
         {
             break amount;
         }
-        console.line("Inserisci un importo positivo con al massimo due decimali.")?;
+        console.line("Enter a positive amount with at most two decimal places.")?;
     };
     let today = Local::now().date_naive().to_string();
     let date = loop {
         let value = input(
             console,
-            "Data (AAAA-MM-GG)",
+            "Date (YYYY-MM-DD)",
             suggestion.occurred_at.as_deref().or(Some(&today)),
         )?;
         if NaiveDate::parse_from_str(&value, "%Y-%m-%d").is_ok_and(|date| date.to_string() == value)
         {
             break value;
         }
-        console.line("Usa il formato AAAA-MM-GG.")?;
+        console.line("Use YYYY-MM-DD.")?;
     };
     let description = input(
         console,
-        "Descrizione facoltativa",
+        "Description (optional)",
         suggestion.description.as_deref(),
     )?;
     console.line(format_args!(
@@ -252,7 +252,7 @@ fn review_movement(
     if let Some(target) = account_to.as_ref().or(category.as_ref()) {
         console.line(target)?;
     }
-    console.select("Confermare il movimento?", &["Salva movimento"])?;
+    console.select("Confirm this transaction?", &["Save transaction"])?;
     let transaction = store.confirm_recording(
         recording.id,
         &Extraction {
@@ -265,7 +265,7 @@ fn review_movement(
             description: Some(description),
         },
     )?;
-    console.line(format_args!("Movimento registrato (#{transaction})."))?;
+    console.line(format_args!("Transaction recorded (#{transaction})."))?;
     Ok(true)
 }
 
@@ -279,7 +279,7 @@ fn required(
         if !value.is_empty() && value.chars().count() <= 100 {
             return Ok(value);
         }
-        console.line("Inserisci un nome da 1 a 100 caratteri.")?;
+        console.line("Enter a name of 1 to 100 characters.")?;
     }
 }
 

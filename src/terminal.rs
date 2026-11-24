@@ -73,7 +73,7 @@ impl<R: BufRead, W: Write> Console<R, W> {
             return Err(FlowError::Exit);
         }
         let trimmed = line.trim();
-        if trimmed == "/annulla" {
+        if matches!(trimmed, "/cancel" | "/annulla") {
             return Err(FlowError::Cancel);
         }
         Ok(trimmed.to_owned())
@@ -98,14 +98,14 @@ impl<R: BufRead, W: Write> Console<R, W> {
         self.field(
             label,
             |s| (!s.is_empty() && s.chars().count() <= 100).then(|| s.to_owned()),
-            "Inserisci un nome da 1 a 100 caratteri.",
+            "Enter a name of 1 to 100 characters.",
         )
     }
 
     fn date(&mut self) -> Flow<NaiveDate> {
         let today = Local::now().date_naive();
         self.field(
-            format_args!("Data [{today}]"),
+            format_args!("Date [{today}]"),
             |s| {
                 if s.is_empty() {
                     return Some(today);
@@ -114,15 +114,15 @@ impl<R: BufRead, W: Write> Console<R, W> {
                     .ok()
                     .filter(|date| date.to_string() == s)
             },
-            "Usa il formato AAAA-MM-GG.",
+            "Use YYYY-MM-DD.",
         )
     }
 
     fn amount(&mut self) -> Flow<i64> {
         self.field(
-            "Importo",
+            "Amount",
             |s| parse_cents(s).filter(|amount| *amount > 0),
-            "Inserisci un importo positivo con al massimo due decimali.",
+            "Enter a positive amount with at most two decimal places.",
         )
     }
 
@@ -157,9 +157,9 @@ impl<R: BufRead, W: Write> Console<R, W> {
             self.line(format_args!("{}. {label}", index + 1))?;
         }
         let choice = self.field(
-            "Scelta (0 per tornare)",
+            "Choice (0 to go back)",
             |s| s.parse::<usize>().ok().filter(|n| *n <= labels.len()),
-            "Scegli una delle voci elencate.",
+            "Select one of the listed options.",
         )?;
         Ok(choice.checked_sub(1).unwrap_or(labels.len()))
     }
@@ -174,7 +174,7 @@ impl<R: BufRead, W: Write> Console<R, W> {
 
     pub fn startup_status(&mut self, message: &str) -> io::Result<()> {
         if let Some(screen) = &mut self.screen {
-            screen.activity("Avvio di Koin", message, "")
+            screen.activity("Starting Koin", message, "")
         } else {
             self.line(message)
         }
@@ -200,16 +200,16 @@ pub fn run(
     audio_processes: &mut AudioProcesses,
 ) -> Result<()> {
     const ACTIONS: [&str; 7] = [
-        "Conti e saldi",
-        "Categorie",
-        "Registra movimento",
-        "Trasferisci tra conti",
-        "Storico movimenti",
+        "Accounts and balances",
+        "Categories",
+        "Record transaction",
+        "Transfer between accounts",
+        "Transaction history",
         "Audio",
-        "Report",
+        "Reports",
     ];
     if console.screen.is_none() {
-        console.line("Digita /annulla durante la compilazione per tornare al menu.")?;
+        console.line("Enter /cancel to cancel a form and return to the menu.")?;
     }
     let mut selected = 0;
     loop {
@@ -235,7 +235,7 @@ pub fn run(
                 console,
                 &store,
                 ACTIONS[choice],
-                "Crea conto",
+                "Create account",
                 account_overview,
                 create_account,
             ),
@@ -243,7 +243,7 @@ pub fn run(
                 console,
                 &store,
                 ACTIONS[choice],
-                "Crea categoria",
+                "Create category",
                 category_overview,
                 create_category,
             ),
@@ -258,10 +258,10 @@ pub fn run(
             Ok(()) => {}
             Err(FlowError::Exit) => return Ok(()),
             Err(FlowError::Cancel) => {
-                console.line("Operazione annullata.")?;
+                console.line("Operation canceled.")?;
                 continue;
             }
-            Err(FlowError::Failure(error)) => console.line(format_args!("Errore: {error:#}"))?,
+            Err(FlowError::Failure(error)) => console.line(format_args!("Error: {error:#}"))?,
         }
         match console.show_results() {
             Ok(()) | Err(FlowError::Cancel) => {}
@@ -290,7 +290,7 @@ fn manage_collection<R: BufRead, W: Write>(
         match create(console, store) {
             Ok(()) | Err(FlowError::Cancel) => {}
             Err(FlowError::Exit) => return Err(FlowError::Exit),
-            Err(FlowError::Failure(error)) => console.line(format_args!("Errore: {error:#}"))?,
+            Err(FlowError::Failure(error)) => console.line(format_args!("Error: {error:#}"))?,
         }
     }
 }
@@ -299,8 +299,8 @@ fn register_movement(
     console: &mut Console<impl BufRead, impl Write>,
     store: &mut Store,
 ) -> Flow<()> {
-    let labels = ["Entrata", "Uscita"];
-    let choice = console.menu("Registra movimento", &labels, &mut 0)?;
+    let labels = ["Income", "Expense"];
+    let choice = console.menu("Record transaction", &labels, &mut 0)?;
     let Some(kind) = [CategoryType::Income, CategoryType::Expense]
         .get(choice)
         .copied()
@@ -308,9 +308,9 @@ fn register_movement(
         return Ok(());
     };
     console.section(if kind == CategoryType::Income {
-        "Registra entrata"
+        "Record income"
     } else {
-        "Registra uscita"
+        "Record expense"
     });
     add_movement(console, store, kind)
 }
@@ -318,7 +318,7 @@ fn register_movement(
 fn account_overview(store: &Store) -> Result<Vec<String>> {
     let accounts = store.accounts()?;
     if accounts.is_empty() {
-        return Ok(vec!["Nessun conto.".to_owned()]);
+        return Ok(vec!["No accounts.".to_owned()]);
     }
     let mut totals = BTreeMap::<&str, i128>::new();
     for account in &accounts {
@@ -326,7 +326,7 @@ fn account_overview(store: &Store) -> Result<Vec<String>> {
     }
     let mut rows: Vec<_> = totals
         .into_iter()
-        .map(|(currency, total)| format!("Totale  {} {currency}", format_cents(total)))
+        .map(|(currency, total)| format!("Total  {} {currency}", format_cents(total)))
         .collect();
     rows.push(String::new());
     rows.extend(accounts.iter().map(|account| {
@@ -341,18 +341,18 @@ fn account_overview(store: &Store) -> Result<Vec<String>> {
 }
 
 fn create_account(console: &mut Console<impl BufRead, impl Write>, store: &Store) -> Flow<()> {
-    let name = console.name("Nome conto")?;
+    let name = console.name("Account name")?;
     let currency = console.field(
-        "Valuta [EUR]",
+        "Currency [EUR]",
         |s| {
             let s = if s.is_empty() { "EUR" } else { s };
             (s.len() == 3 && s.bytes().all(|b| b.is_ascii_alphabetic()))
                 .then(|| s.to_ascii_uppercase())
         },
-        "Inserisci un codice valuta di tre lettere.",
+        "Enter a three-letter currency code.",
     )?;
     let initial_balance = console.field(
-        "Saldo iniziale [0]",
+        "Opening balance [0]",
         |s| {
             if s.is_empty() {
                 Some(0)
@@ -360,17 +360,17 @@ fn create_account(console: &mut Console<impl BufRead, impl Write>, store: &Store
                 parse_cents(s)
             }
         },
-        "Inserisci un importo con al massimo due decimali.",
+        "Enter an amount with at most two decimal places.",
     )?;
     store.create_account(&name, &currency, initial_balance)?;
-    console.line("Conto creato.")?;
+    console.line("Account created.")?;
     Ok(())
 }
 
 fn category_overview(store: &Store) -> Result<Vec<String>> {
     let categories = store.categories()?;
     if categories.is_empty() {
-        return Ok(vec!["Nessuna categoria.".to_owned()]);
+        return Ok(vec!["No categories.".to_owned()]);
     }
     Ok(categories
         .into_iter()
@@ -384,10 +384,10 @@ fn create_category(console: &mut Console<impl BufRead, impl Write>, store: &Stor
         CategoryType::Expense,
         CategoryType::Transfer,
     ];
-    let kind = kinds[console.select("Tipo categoria", &kinds.map(kind_label))?];
-    let name = console.name("Nome categoria")?;
+    let kind = kinds[console.select("Category type", &kinds.map(kind_label))?];
+    let name = console.name("Category name")?;
     store.create_category(&name, kind)?;
-    console.line("Categoria creata.")?;
+    console.line("Category created.")?;
     Ok(())
 }
 
@@ -410,10 +410,10 @@ fn add_movement(
 ) -> Flow<()> {
     let accounts = store.accounts()?;
     if accounts.is_empty() {
-        console.line("Crea almeno un conto per registrare un movimento.")?;
+        console.line("Create an account before recording a transaction.")?;
         return Ok(());
     }
-    let account = select_account(console, "Conto", &accounts.iter().collect::<Vec<_>>())?;
+    let account = select_account(console, "Account", &accounts.iter().collect::<Vec<_>>())?;
     let categories = store.categories()?;
     let mut labels: Vec<_> = categories
         .iter()
@@ -421,16 +421,16 @@ fn add_movement(
         .map(|category| category.name.as_str())
         .collect();
     let new_category_index = labels.len();
-    labels.push("Nuova categoria");
-    let selected = console.select("Categoria", &labels)?;
+    labels.push("New category");
+    let selected = console.select("Category", &labels)?;
     let category = if selected == new_category_index {
-        console.name("Nome nuova categoria")?
+        console.name("New category name")?
     } else {
         labels[selected].to_owned()
     };
     let amount = console.amount()?;
     let date = console.date()?;
-    let description = console.prompt("Descrizione facoltativa")?;
+    let description = console.prompt("Description (optional)")?;
     let id = store.add_movement(Movement {
         account: &account.name,
         category: &category,
@@ -443,29 +443,29 @@ fn add_movement(
         },
         description: optional(&description),
     })?;
-    console.line(format_args!("Movimento registrato (#{id})."))?;
+    console.line(format_args!("Transaction recorded (#{id})."))?;
     Ok(())
 }
 
 fn transfer(console: &mut Console<impl BufRead, impl Write>, store: &mut Store) -> Flow<()> {
     let accounts = store.accounts()?;
     if accounts.len() < 2 {
-        console.line("Servono almeno due conti per un trasferimento.")?;
+        console.line("You need at least two accounts to transfer money.")?;
         return Ok(());
     }
     let from = select_account(
         console,
-        "Conto di origine",
+        "Source account",
         &accounts.iter().collect::<Vec<_>>(),
     )?;
     let targets: Vec<_> = accounts
         .iter()
         .filter(|account| account.id != from.id)
         .collect();
-    let to = select_account(console, "Conto di destinazione", &targets)?;
+    let to = select_account(console, "Destination account", &targets)?;
     let amount = console.amount()?;
     let date = console.date()?;
-    let description = console.prompt("Descrizione facoltativa")?;
+    let description = console.prompt("Description (optional)")?;
     let id = store.transfer(Transfer {
         from: &from.name,
         to: &to.name,
@@ -473,15 +473,15 @@ fn transfer(console: &mut Console<impl BufRead, impl Write>, store: &mut Store) 
         amount,
         description: optional(&description),
     })?;
-    console.line(format_args!("Trasferimento registrato (#{id})."))?;
+    console.line(format_args!("Transfer recorded (#{id})."))?;
     Ok(())
 }
 
 fn kind_label(kind: CategoryType) -> &'static str {
     match kind {
-        CategoryType::Income => "Entrata",
-        CategoryType::Expense => "Uscita",
-        CategoryType::Transfer => "Trasferimento",
+        CategoryType::Income => "Income",
+        CategoryType::Expense => "Expense",
+        CategoryType::Transfer => "Transfer",
     }
 }
 
@@ -513,5 +513,5 @@ fn format_cents(amount: impl Into<i128>) -> String {
     let amount = amount.into();
     let magnitude = amount.unsigned_abs();
     let sign = if amount < 0 { "-" } else { "" };
-    format!("{sign}{},{:02}", magnitude / 100, magnitude % 100)
+    format!("{sign}{}.{:02}", magnitude / 100, magnitude % 100)
 }

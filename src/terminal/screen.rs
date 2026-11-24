@@ -66,11 +66,11 @@ impl Screen {
             self.terminal.draw(|frame| {
                 let keys = match (has_overview, action_focused, logs.is_some()) {
                     (_, _, true) => {
-                        "↑/↓ Menu   Invio Apri   Esc Esci   PgSu/PgGi Log   ←/→ Testo log"
+                        "↑/↓ Menu   Enter Open   Esc Exit   PgUp/PgDn Logs   ←/→ Log text"
                     }
-                    (true, false, _) => "→ Azioni   ↑/↓ PgSu/PgGi Scorri   Maiusc+←/→ Testo   Esc",
-                    (true, true, _) => "Invio Apri   ← Torna alla lista   Esc",
-                    (false, _, _) => "↑ ↓ Sposta   Invio Seleziona   Esc Indietro",
+                    (true, false, _) => "→ Actions   ↑/↓ PgUp/PgDn Scroll   Shift+←/→ Text   Esc",
+                    (true, true, _) => "Enter Open   ← Back to list   Esc",
+                    (false, _, _) => "↑/↓ Move   Enter Select   Esc Back",
                 };
                 let rect = layout(frame, title, keys);
                 let rect = if let Some(logs) = logs {
@@ -187,7 +187,7 @@ impl Screen {
         let mut replace_on_type = !input.is_empty();
         loop {
             self.terminal.draw(|frame| {
-                let rect = layout(frame, &self.title, "Invio Continua   Esc Annulla");
+                let rect = layout(frame, &self.title, "Enter Continue   Esc Cancel");
                 let content = with_messages(frame, rect, &self.lines);
                 let [label_area, input_area] =
                     Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(content);
@@ -311,20 +311,16 @@ impl Screen {
     }
 
     pub(super) fn record(&mut self) -> Flow<(Vec<u8>, i64)> {
-        self.activity("Registrazione audio", "Apertura microfono…", "")?;
+        self.activity("Audio recording", "Opening microphone…", "")?;
         let microphone = Microphone::start()?;
         let started = Instant::now();
         loop {
             let seconds = started.elapsed().as_secs();
-            let elapsed = format!(
-                "Registrazione in corso   {:02}:{:02}",
-                seconds / 60,
-                seconds % 60
-            );
+            let elapsed = format!("Recording   {:02}:{:02}", seconds / 60, seconds % 60);
             self.activity(
-                "Registrazione audio",
+                "Audio recording",
                 &elapsed,
-                "Invio Ferma e salva   Esc Scarta",
+                "Enter Stop and save   Esc Discard",
             )?;
             if microphone.is_full()? {
                 break;
@@ -353,12 +349,12 @@ impl Screen {
                 let area = layout(
                     frame,
                     &self.title,
-                    "←/→ Mesi   ↑/↓ Righe   PgSu/PgGi Pagina   Esc",
+                    "←/→ Months   ↑/↓ Rows   PgUp/PgDn Page   Esc",
                 );
                 let [caption, table_area] =
                     Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
                 let category_width = (area.width / 4).clamp(8, 24);
-                let average_width = 13;
+                let average_width = 15;
                 let month_width = 12;
                 shown_months = usize::from(
                     area.width
@@ -412,7 +408,7 @@ impl Screen {
                     shown_months,
                 ));
                 let window = format!(
-                    "Esclusa la categoria Prestito   ·   Mesi {}–{} di {month_count}",
+                    "Excluding the Prestito category   ·   Months {}–{} of {month_count}",
                     month_offset + 1,
                     month_offset + shown_months
                 );
@@ -453,7 +449,7 @@ impl Screen {
                 let area = layout(
                     frame,
                     &self.title,
-                    "↑ ↓ Scorri   PgSu PgGi Pagina   Invio / Esc Indietro",
+                    "↑/↓ Scroll   PgUp/PgDn Page   Enter / Esc Back",
                 );
                 height = usize::from(area.height).max(1);
                 offset = offset.min(rows.len().saturating_sub(height));
@@ -527,14 +523,14 @@ fn render_logs(
 ) -> usize {
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Log Ollama ")
+        .title(" Ollama logs ")
         .border_style(Style::default().fg(Color::DarkGray));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let lines = logs.snapshot();
     if lines.is_empty() {
         frame.render_widget(
-            Paragraph::new("Avvia Ollama dal menu Audio per vedere i log.")
+            Paragraph::new("Start Ollama from the Audio menu to see its logs.")
                 .wrap(Wrap { trim: true }),
             inner,
         );

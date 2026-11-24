@@ -322,7 +322,7 @@ fn racing_retries_record_a_single_movement() -> Result<()> {
         results
             .iter()
             .filter_map(|result| result.as_ref().err())
-            .all(|e| e.to_string().contains("già esistente"))
+            .all(|e| e.to_string().contains("already exists"))
     );
     let store = db.store()?;
     assert_eq!(db.journal_counts()?, (1, 1));
