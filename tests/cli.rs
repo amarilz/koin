@@ -458,3 +458,35 @@ fn version_matches_release_version_without_opening_database_or_receiver() -> Res
     );
     Ok(())
 }
+
+#[test]
+fn set_current_balance_adjusts_opening_balance_without_changing_history() -> Result<()> {
+    use chrono::NaiveDate;
+    use koin::{CategoryType, Movement};
+
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("reconcile.db");
+    let mut store = Store::create_new(&path)?;
+    let bank = store.create_account("Bank", "EUR", 10_000)?;
+    let cash = store.create_account("Cash", "EUR", 2_000)?;
+    store.add_movement(Movement {
+        account: "Bank",
+        category: "Food",
+        kind: CategoryType::Expense,
+        date: NaiveDate::from_ymd_opt(2026, 11, 24).unwrap(),
+        amount: -1_500,
+        description: None,
+    })?;
+    let history = store.recent_entries(10)?;
+    let output = run(koin_with_database(&path), "1\n2\n1\n-3,50\n0\n0\n")?;
+    assert!(output.contains("Balance set to -3.50 EUR."));
+    assert!(output.contains("Total  16.50 EUR"));
+    let reopened = Store::open_existing(&path)?;
+    assert_eq!(reopened.accounts()?[0].initial_balance, 1_150);
+    assert_eq!(reopened.account_balance(bank)?, -350);
+    assert_eq!(reopened.account_balance(cash)?, 2_000);
+    assert_eq!(reopened.recent_entries(10)?, history);
+    assert!(store.reconcile_account_balance(bank, i64::MAX).is_err());
+    assert_eq!(store.account_balance(bank)?, -350);
+    Ok(())
+}

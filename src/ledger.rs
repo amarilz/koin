@@ -148,6 +148,29 @@ impl Store {
         balance(&self.connection, id)
     }
 
+    pub fn reconcile_account_balance(&mut self, id: i64, actual_balance: i64) -> Result<()> {
+        let tx = self.connection.transaction_with_behavior(Immediate)?;
+        let (initial, current): (i64, i64) = tx
+            .query_row(
+                "SELECT a.initial_balance, koin_balance(a.initial_balance, e.amount)
+             FROM accounts a LEFT JOIN transaction_entries e ON e.account_id = a.id
+             WHERE a.id = ?1 GROUP BY a.id",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .context("Could not read the account balance")?;
+        let adjusted = i128::from(initial) + i128::from(actual_balance) - i128::from(current);
+        let adjusted =
+            i64::try_from(adjusted).context("Adjusted opening balance is out of range")?;
+        let changed = tx.execute(
+            "UPDATE accounts SET initial_balance = ?2 WHERE id = ?1",
+            params![id, adjusted],
+        )?;
+        ensure!(changed == 1, "Could not update the account");
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn create_category(&self, name: &str, kind: CategoryType) -> Result<Category> {
         ensure!(!name.is_empty(), "Category name is required");
         self.connection.execute(

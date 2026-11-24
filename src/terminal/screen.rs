@@ -69,7 +69,7 @@ impl Screen {
                         "↑/↓ Menu   Enter Open   Esc Exit   PgUp/PgDn Logs   ←/→ Log text"
                     }
                     (true, false, _) => "→ Actions   ↑/↓ PgUp/PgDn Scroll   Shift+←/→ Text   Esc",
-                    (true, true, _) => "Enter Open   ← Back to list   Esc",
+                    (true, true, _) => "↑/↓ Actions   Enter Open   ← Back to list   Esc",
                     (false, _, _) => "↑/↓ Move   Enter Select   Esc Back",
                 };
                 let rect = layout(frame, title, keys);
