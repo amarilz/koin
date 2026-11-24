@@ -147,7 +147,7 @@ impl<R: BufRead, W: Write> Console<R, W> {
         }
         if let Some(screen) = &mut self.screen {
             let labels: Vec<_> = labels.iter().map(ToString::to_string).collect();
-            return screen.menu(title, &labels, selected, overview);
+            return screen.menu(title, &labels, selected, overview, None);
         }
         self.line(format_args!("\n{title}"))?;
         for row in overview {
@@ -213,7 +213,17 @@ pub fn run(
     }
     let mut selected = 0;
     loop {
-        let choice = match console.menu("Koin", &ACTIONS, &mut selected) {
+        let selection = match &mut console.screen {
+            Some(screen) => screen.menu(
+                "Koin",
+                &ACTIONS.map(str::to_owned),
+                &mut selected,
+                &[],
+                Some(&audio_processes.logs),
+            ),
+            None => console.menu("Koin", &ACTIONS, &mut selected),
+        };
+        let choice = match selection {
             Ok(choice) if choice < ACTIONS.len() => choice,
             Ok(_) | Err(FlowError::Exit) => return Ok(()),
             Err(FlowError::Cancel) => continue,

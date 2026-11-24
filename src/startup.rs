@@ -5,18 +5,63 @@ use crate::{
 use anyhow::{Context, Result, bail};
 use reqwest::{Url, blocking::Client};
 use std::{
-    io::{BufRead, Write},
+    collections::VecDeque,
+    io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process::{Child, Command, Stdio},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
 
 const COMPOSE: &str = include_str!("../compose.yaml");
+const LOG_CAPACITY: usize = 200;
+
+#[derive(Clone, Default)]
+pub struct OllamaLogs(Arc<Mutex<VecDeque<String>>>);
+
+impl OllamaLogs {
+    pub fn snapshot(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    fn append(&self, line: impl Into<String>) {
+        let mut lines = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        if lines.len() == LOG_CAPACITY {
+            lines.pop_front();
+        }
+        lines.push_back(line.into());
+    }
+
+    fn capture(&self, stream: impl Read + Send + 'static) {
+        let logs = self.clone();
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut bytes = Vec::new();
+            while reader
+                .read_until(b'\n', &mut bytes)
+                .is_ok_and(|count| count > 0)
+            {
+                let line = String::from_utf8_lossy(&bytes);
+                let entry: String = line.trim_end().chars().take(2000).collect();
+                if !entry.is_empty() {
+                    logs.append(entry);
+                }
+                bytes.clear();
+            }
+        });
+    }
+}
 
 #[derive(Default)]
 pub struct AudioProcesses {
     ollama: Option<Child>,
+    pub logs: OllamaLogs,
 }
 
 impl Drop for AudioProcesses {
@@ -43,10 +88,15 @@ impl AudioProcesses {
     pub fn offer_ollama(&mut self, console: &mut Console<impl BufRead, impl Write>) -> Flow<()> {
         let base = ollama_url();
         if ollama_bind(&base).is_none() {
+            self.logs
+                .append("Endpoint Ollama configurato esternamente.");
             return Ok(());
         }
         if ollama_ready(&base) {
             console.line("Ollama è già in esecuzione.")?;
+            if self.ollama.is_none() {
+                self.logs.append("Ollama è già in esecuzione. I log dei processi esterni non sono disponibili qui.");
+            }
             return Ok(());
         }
         if console.menu("Avviare Ollama?", &["No", "Sì, avvia Ollama"], &mut 0)? == 1 {
@@ -65,6 +115,9 @@ impl AudioProcesses {
         let base = ollama_url();
         if ollama_ready(&base) {
             console.line("Ollama è già in esecuzione.")?;
+            if self.ollama.is_none() {
+                self.logs.append("Ollama è già in esecuzione. I log dei processi esterni non sono disponibili qui.");
+            }
             return Ok(());
         }
         let bind = ollama_bind(&base)
@@ -193,16 +246,22 @@ fn start_ollama(base: &str, bind: SocketAddr, processes: &mut AudioProcesses) ->
         None => false,
     };
     if !running {
-        processes.ollama = Some(
-            Command::new("ollama")
-                .arg("serve")
-                .env("OLLAMA_HOST", bind.to_string())
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .context("Impossibile eseguire ollama serve")?,
-        );
+        let mut child = Command::new("ollama")
+            .arg("serve")
+            .env("OLLAMA_HOST", bind.to_string())
+            .env("NO_COLOR", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Impossibile eseguire ollama serve")?;
+        if let Some(stdout) = child.stdout.take() {
+            processes.logs.capture(stdout);
+        }
+        if let Some(stderr) = child.stderr.take() {
+            processes.logs.capture(stderr);
+        }
+        processes.ollama = Some(child);
     }
     let child = processes
         .ollama
@@ -219,4 +278,22 @@ fn start_ollama(base: &str, bind: SocketAddr, processes: &mut AudioProcesses) ->
         thread::sleep(Duration::from_millis(250));
     }
     bail!("Ollama non ha ancora risposto su {bind}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn log_buffer_keeps_the_most_recent_lines_in_order() {
+        let logs = OllamaLogs::default();
+        let reader = logs.clone();
+        for index in 0..LOG_CAPACITY + 10 {
+            logs.append(index.to_string());
+        }
+        let snapshot = reader.snapshot();
+        assert_eq!(snapshot.len(), LOG_CAPACITY);
+        assert_eq!(snapshot.first().map(String::as_str), Some("10"));
+        assert_eq!(snapshot.last(), Some(&(LOG_CAPACITY + 9).to_string()));
+    }
 }

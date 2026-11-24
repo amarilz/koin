@@ -1,4 +1,5 @@
 use super::{Flow, FlowError, microphone::Microphone};
+use crate::startup::OllamaLogs;
 use crossterm::{
     cursor::Show,
     event::{
@@ -50,7 +51,10 @@ impl Screen {
         choices: &[String],
         selected: &mut usize,
         overview: &[String],
+        logs: Option<&OllamaLogs>,
     ) -> Flow<usize> {
+        let mut log_offset = 0_usize;
+        let mut log_page = 1_usize;
         let mut offset = 0_usize;
         let mut page = 1_usize;
         let mut horizontal = 0_u16;
@@ -60,12 +64,27 @@ impl Screen {
         loop {
             state.select(action_focused.then_some(*selected));
             self.terminal.draw(|frame| {
-                let keys = match (has_overview, action_focused) {
-                    (true, false) => "→ Azioni   ↑/↓ PgSu/PgGi Scorri   Maiusc+←/→ Testo   Esc",
-                    (true, true) => "Invio Apri   ← Torna alla lista   Esc",
-                    (false, _) => "↑ ↓ Sposta   Invio Seleziona   Esc Indietro",
+                let keys = match (has_overview, action_focused, logs.is_some()) {
+                    (_, _, true) => {
+                        "↑/↓ Menu   Invio Apri   Esc Esci   PgSu/PgGi Log   ←/→ Testo log"
+                    }
+                    (true, false, _) => "→ Azioni   ↑/↓ PgSu/PgGi Scorri   Maiusc+←/→ Testo   Esc",
+                    (true, true, _) => "Invio Apri   ← Torna alla lista   Esc",
+                    (false, _, _) => "↑ ↓ Sposta   Invio Seleziona   Esc Indietro",
                 };
                 let rect = layout(frame, title, keys);
+                let rect = if let Some(logs) = logs {
+                    let [navigation, log_area] = Layout::horizontal([
+                        Constraint::Percentage(38),
+                        Constraint::Percentage(62),
+                    ])
+                    .areas(rect);
+                    log_page = usize::from(log_area.height.saturating_sub(2)).max(1);
+                    log_offset = render_logs(frame, log_area, logs, log_offset, horizontal);
+                    navigation
+                } else {
+                    rect
+                };
                 let content = with_messages(frame, rect, &self.lines);
                 let menu_area = if !has_overview {
                     content
@@ -104,7 +123,15 @@ impl Screen {
                     );
                 frame.render_stateful_widget(list, menu_area, &mut state);
             })?;
-            let Event::Key(key) = next_input()? else {
+            let event = if logs.is_some() {
+                if !event::poll(Duration::from_millis(150))? {
+                    continue;
+                }
+                checked_event(event::read()?)?
+            } else {
+                Some(next_input()?)
+            };
+            let Some(Event::Key(key)) = event else {
                 continue;
             };
             match key.code {
@@ -116,6 +143,14 @@ impl Screen {
                 }
                 KeyCode::Up => *selected = selected.checked_sub(1).unwrap_or(choices.len() - 1),
                 KeyCode::Down => *selected = (*selected + 1) % choices.len(),
+                KeyCode::PageUp if logs.is_some() => {
+                    log_offset = log_offset.saturating_add(log_page)
+                }
+                KeyCode::PageDown if logs.is_some() => {
+                    log_offset = log_offset.saturating_sub(log_page)
+                }
+                KeyCode::Left if logs.is_some() => horizontal = horizontal.saturating_sub(8),
+                KeyCode::Right if logs.is_some() => horizontal = horizontal.saturating_add(8),
                 KeyCode::Left if !action_focused && key.modifiers.contains(KeyModifiers::SHIFT) => {
                     horizontal = horizontal.saturating_sub(8);
                 }
@@ -481,6 +516,39 @@ fn checked_event(event: Event) -> Flow<Option<Event>> {
         }
     }
     Ok(Some(event))
+}
+
+fn render_logs(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    logs: &OllamaLogs,
+    from_tail: usize,
+    horizontal: u16,
+) -> usize {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Log Ollama ")
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let lines = logs.snapshot();
+    if lines.is_empty() {
+        frame.render_widget(
+            Paragraph::new("Avvia Ollama dal menu Audio per vedere i log.")
+                .wrap(Wrap { trim: true }),
+            inner,
+        );
+        return 0;
+    }
+    let height = usize::from(inner.height);
+    let end = lines.len() - from_tail.min(lines.len().saturating_sub(height));
+    let start = end.saturating_sub(height);
+    let text: Vec<_> = lines[start..end]
+        .iter()
+        .map(|line| Line::from(visible(line)))
+        .collect();
+    frame.render_widget(Paragraph::new(text).scroll((0, horizontal)), inner);
+    lines.len() - end
 }
 
 fn layout(frame: &mut Frame<'_>, title: &str, footer: &str) -> Rect {
